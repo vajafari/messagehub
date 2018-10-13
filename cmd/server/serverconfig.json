@@ -1,0 +1,6 @@
+{
+    "host": "localhost",
+    "port": 31549,
+    "netType": "tcp",
+    "sendBufSize": 20
+}
