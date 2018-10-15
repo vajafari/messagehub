@@ -2,9 +2,9 @@ package socket
 
 //Socket define standard for communication channel
 type Socket interface {
-	SetCommChannels(chan<- WData, chan<- RData, chan<- ProbData)
-	Send(frm Frame)
+	Start(chan<- WData, chan<- RData, chan<- ProbData, map[byte]uint32)
 	Close() error
 	ID() uint64
 	SetID(uint64)
+	Send(frm Frame)
 }

@@ -2,8 +2,8 @@ package message
 
 import "encoding/binary"
 
-// In this context nil sclice considered as empty slice, so they are equal
-func checkEq(a, b []byte) bool {
+// checkEqByte In this context nil sclice considered as empty slice, so they are equal
+func checkEqByte(a, b []byte) bool {
 
 	if len(a) != len(b) {
 		return false
@@ -77,4 +77,24 @@ func getUnit64Bytes(input []uint64) []byte {
 		copy(res[i*8:], bb)
 	}
 	return res
+}
+
+// ChkIDResponseMsgEq check equeality of IDResponseMsg message
+func ChkIDResponseMsgEq(a, b IDResponseMsg) bool {
+	return a.ID == b.ID
+}
+
+// ChkListResponseMsgEq check equeality of ListResponseMsg message
+func ChkListResponseMsgEq(a, b ListResponseMsg) bool {
+	return checkEqUint64(a.IDs, b.IDs)
+}
+
+// ChkRelayRequestMsgEq check equeality of RelayRequestMsg message
+func ChkRelayRequestMsgEq(a, b RelayRequestMsg) bool {
+	return checkEqUint64(a.IDs, b.IDs) && checkEqByte(a.Data, b.Data)
+}
+
+// ChkRelayResponseMsgEq check equeality of RelayResponseMsg message
+func ChkRelayResponseMsgEq(a, b RelayResponseMsg) bool {
+	return checkEqByte(a.Data, b.Data) && a.SenderID == b.SenderID
 }

@@ -9,19 +9,27 @@ type IDRequestMsg struct {
 }
 
 // Type get type of id message
-func (msg *IDRequestMsg) Type() byte {
+func (msg IDRequestMsg) Type() byte {
 	return byte(IDMgsCode)
 }
 
 // Length get length of body for IDRequestMsg object
-func (msg *IDRequestMsg) Length() uint32 {
+func (msg IDRequestMsg) Length() uint32 {
 	return 0
 }
 
 // Serialize get frame bytes of IDRequestMsg
-func (msg *IDRequestMsg) Serialize() []byte {
+func (msg IDRequestMsg) Serialize() []byte {
 	return appendSlices(makeHeaderBytes(msg.Type(), msg.Length()), nil)
 }
+
+// // Deserialize get frame bytes of IDRequestMsg
+// func Deserialize(bb []byte) (IDRequestMsg, error) {
+// 	if len(bb) > 0 {
+// 		return IDRequestMsg{}, ErrParsStream
+// 	}
+// 	return IDRequestMsg{}, nil
+// }
 
 // IDResponseMsg represent response of server to client and assign id to client
 type IDResponseMsg struct {
@@ -29,17 +37,17 @@ type IDResponseMsg struct {
 }
 
 // Type get type of id message
-func (msg *IDResponseMsg) Type() byte {
+func (msg IDResponseMsg) Type() byte {
 	return byte(IDMgsCode)
 }
 
 // Length get length of body for IDResponseMsg object
-func (msg *IDResponseMsg) Length() uint32 {
+func (msg IDResponseMsg) Length() uint32 {
 	return 8
 }
 
 // Serialize get frame bytes of IDResponseMsg
-func (msg *IDResponseMsg) Serialize() []byte {
+func (msg IDResponseMsg) Serialize() []byte {
 	res := make([]byte, 13)
 	res[0] = msg.Type()
 	res[1] = 8

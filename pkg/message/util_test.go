@@ -2,7 +2,7 @@ package message
 
 import "testing"
 
-func TestCheckEq(t *testing.T) {
+func TestCheckEqByte(t *testing.T) {
 	var tests = []struct {
 		first    []byte
 		second   []byte
@@ -21,8 +21,8 @@ func TestCheckEq(t *testing.T) {
 		{[]byte{1, 2, 3}, []byte{1, 2, 3}, true},
 	}
 	for _, tt := range tests {
-		actual := checkEq(tt.first, tt.second)
-		if checkEq(tt.first, tt.second) != tt.expected {
+		actual := checkEqByte(tt.first, tt.second)
+		if checkEqByte(tt.first, tt.second) != tt.expected {
 			t.Errorf("checkEq: first %v second %v expected %t, actual %t", tt.first, tt.second, tt.expected, actual)
 		}
 	}
@@ -41,7 +41,7 @@ func TestMakeHeaderBytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		actual := makeHeaderBytes(tt.messageType, tt.length)
-		if !checkEq(actual, tt.expected) {
+		if !checkEqByte(actual, tt.expected) {
 			t.Errorf("makeHeaderBytes: expected %v, actual %v", tt.expected, actual)
 		}
 	}
@@ -63,7 +63,7 @@ func TestAppendSlices(t *testing.T) {
 	}
 	for _, tt := range tests {
 		actual := appendSlices(tt.first, tt.second)
-		if !checkEq(actual, tt.expected) {
+		if !checkEqByte(actual, tt.expected) {
 			t.Errorf("appendSlices: expected %v, actual %v", tt.expected, actual)
 		}
 	}
@@ -81,7 +81,7 @@ func TestGetUnit32Bytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		actual := getUnit32Bytes(tt.nums)
-		if !checkEq(actual, tt.expected) {
+		if !checkEqByte(actual, tt.expected) {
 			t.Errorf("getUnit32Bytes: expected %v, actual %v", tt.expected, actual)
 		}
 	}
@@ -101,8 +101,117 @@ func TestGetUnit64Bytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		actual := getUnit64Bytes(tt.nums)
-		if !checkEq(actual, tt.expected) {
+		if !checkEqByte(actual, tt.expected) {
 			t.Errorf("GetUnit64Bytes: expected %v, actual %v", tt.expected, actual)
+		}
+	}
+}
+
+func TestChkIDResponseMsgEq(t *testing.T) {
+	var tests = []struct {
+		a        IDResponseMsg // input
+		b        IDResponseMsg // input
+		expected bool          // expected result
+	}{
+		{IDResponseMsg{}, IDResponseMsg{}, true},
+		{IDResponseMsg{ID: 1}, IDResponseMsg{ID: 1}, true},
+		{IDResponseMsg{ID: 1}, IDResponseMsg{ID: 2}, false},
+	}
+	for _, tt := range tests {
+		actual := ChkIDResponseMsgEq(tt.a, tt.b)
+		if actual != tt.expected {
+			t.Errorf("ChkIDResponseMsgEq: expected %t, actual %t", tt.expected, actual)
+		}
+	}
+}
+
+func TestChkListResponseMsgEq(t *testing.T) {
+	var tests = []struct {
+		a        ListResponseMsg // input
+		b        ListResponseMsg // input
+		expected bool            // expected result
+	}{
+		{ListResponseMsg{}, ListResponseMsg{}, true},
+		{ListResponseMsg{IDs: []uint64{}}, ListResponseMsg{IDs: []uint64{}}, true},
+		{ListResponseMsg{}, ListResponseMsg{IDs: []uint64{}}, true},
+		{ListResponseMsg{IDs: []uint64{}}, ListResponseMsg{}, true},
+		{ListResponseMsg{}, ListResponseMsg{IDs: []uint64{1}}, false},
+		{ListResponseMsg{IDs: []uint64{1}}, ListResponseMsg{}, false},
+		{ListResponseMsg{IDs: []uint64{1, 2, 3, 4, 5}}, ListResponseMsg{IDs: []uint64{1, 2, 3, 4, 6}}, false},
+		{ListResponseMsg{IDs: []uint64{1, 2, 3, 4, 5}}, ListResponseMsg{IDs: []uint64{1, 2, 3}}, false},
+		{ListResponseMsg{IDs: []uint64{1, 2, 3}}, ListResponseMsg{IDs: []uint64{1, 2, 3, 4, 5}}, false},
+		{ListResponseMsg{IDs: []uint64{1, 2, 3, 4, 5}}, ListResponseMsg{IDs: []uint64{1, 2, 3, 4, 5}}, true},
+	}
+	for _, tt := range tests {
+		actual := ChkListResponseMsgEq(tt.a, tt.b)
+		if actual != tt.expected {
+			t.Errorf("ChkListResponseMsgEq: expected %t, actual %t", tt.expected, actual)
+		}
+	}
+}
+
+func TestChkRelayRequestMsgEq(t *testing.T) {
+	var tests = []struct {
+		a        RelayRequestMsg // input
+		b        RelayRequestMsg // input
+		expected bool            // expected result
+	}{
+		{RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, true},
+		{RelayRequestMsg{Data: []byte{}}, RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}}, RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, RelayRequestMsg{Data: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, RelayRequestMsg{IDs: []uint64{}}, true},
+		{RelayRequestMsg{}, RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}}, RelayRequestMsg{Data: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, RelayRequestMsg{}, true},
+		{RelayRequestMsg{}, RelayRequestMsg{Data: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}}, RelayRequestMsg{}, true},
+		{RelayRequestMsg{}, RelayRequestMsg{}, true},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, true},
+		{RelayRequestMsg{Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}}, false},
+		{RelayRequestMsg{}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}}, RelayRequestMsg{Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{}, false},
+		{RelayRequestMsg{}, RelayRequestMsg{Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}}, RelayRequestMsg{}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 4}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 7}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3, 4}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6, 7}}, false},
+		{RelayRequestMsg{IDs: []uint64{3, 5, 7}, Data: []byte{1, 3, 5}}, RelayRequestMsg{IDs: []uint64{2, 4, 6}, Data: []byte{6, 8, 9}}, false},
+	}
+	for _, tt := range tests {
+		actual := ChkRelayRequestMsgEq(tt.a, tt.b)
+		if actual != tt.expected {
+			t.Errorf("ChkRelayRequestMsgEq: expected %t, actual %t", tt.expected, actual)
+		}
+	}
+}
+
+func TestChkRelayResponseMsgEq(t *testing.T) {
+	var tests = []struct {
+		a        RelayResponseMsg // input
+		b        RelayResponseMsg // input
+		expected bool             // expected result
+	}{
+		{RelayResponseMsg{}, RelayResponseMsg{}, true},
+		{RelayResponseMsg{Data: []byte{}}, RelayResponseMsg{Data: []byte{}}, true},
+		{RelayResponseMsg{}, RelayResponseMsg{Data: []byte{}}, true},
+		{RelayResponseMsg{Data: []byte{}}, RelayResponseMsg{}, true},
+		{RelayResponseMsg{}, RelayResponseMsg{Data: []byte{1}}, false},
+		{RelayResponseMsg{Data: []byte{1}}, RelayResponseMsg{}, false},
+		{RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Data: []byte{1, 2, 3, 4, 6}}, false},
+		{RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Data: []byte{1, 2, 3}}, false},
+		{RelayResponseMsg{Data: []byte{1, 2, 3}}, RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, false},
+		{RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, true},
+	}
+	for _, tt := range tests {
+		actual := ChkRelayResponseMsgEq(tt.a, tt.b)
+		if actual != tt.expected {
+			t.Errorf("ChkRelayResponseMsgEq: expected %t, actual %t", tt.expected, actual)
 		}
 	}
 }

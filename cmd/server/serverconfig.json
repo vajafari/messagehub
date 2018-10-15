@@ -2,5 +2,7 @@
     "host": "localhost",
     "port": 31549,
     "netType": "tcp",
-    "sendBufSize": 20
+    "sendQueueSize": 20,
+    "readBufSize": 10,
+    "writeBufSize": 10
 }

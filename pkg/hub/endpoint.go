@@ -5,16 +5,21 @@ package hub
 
 import (
 	"log"
+	"math/rand"
 	"net"
 	"strconv"
+
+	"github.com/vajafari/messagehub/pkg/socket"
 )
 
 // EndpointConfing Containt configuration for tcp end point
 type EndpointConfing struct {
-	Host        string
-	Port        int
-	NetType     string
-	SendBufSize int
+	Host          string
+	Port          int
+	NetType       string
+	SendQueueSize int
+	ReadBufSize   int
+	WriteBufSize  int
 }
 
 // GetHostAddress Apprend host address and port number together and return  full address of site
@@ -51,14 +56,14 @@ func NewEndpoint(config EndpointConfing) *Endpoint {
 func (e *Endpoint) Start() error {
 	addr, errAddr := net.ResolveTCPAddr(e.config.NetType, e.config.GetHostAddress())
 	if errAddr != nil {
-		log.Printf("Address is not valid %s\n. Error message %s",
+		log.Printf("Endpoint, Address is not valid %s\n. Error message %s",
 			e.config.GetHostAddress(), errAddr.Error())
 		return errAddr
 	}
 
 	listener, errListen := net.ListenTCP(e.config.NetType, addr)
 	if errListen != nil {
-		log.Printf("Unable to listen on host address %s\n. Error message %s",
+		log.Printf("Endpoint, Unable to listen on host address %s\n. Error message %s",
 			e.config.GetHostAddress(), errListen.Error())
 		return errListen
 	}
@@ -67,19 +72,19 @@ func (e *Endpoint) Start() error {
 	defer listener.Close()
 	e.listener = listener
 
-	log.Println("Listen on", listener.Addr().String())
+	log.Println("Endpoint, Listen on", listener.Addr().String())
 	for {
 		select {
 		case <-e.stopChan:
-			log.Println("exist command recieved")
+			log.Println("Endpoint, exist command recieved")
 			return nil
 		default:
 		}
-		log.Println("Accept a connection request.")
+		log.Println("Endpoint, Accept a connection request.")
 
 		conn, err := listener.AcceptTCP()
 		if err != nil {
-			log.Println("Failed accepting a connection request:", err)
+			log.Println("Endpoint, Failed accepting a connection request:", err)
 			continue
 
 		}
@@ -88,7 +93,9 @@ func (e *Endpoint) Start() error {
 		//interval of 75 seconds after a connection has been idle for 2 hours.
 		//Or in other words, Read will return an io.EOF error after 2 hours and 10 minutes (7200 + 8 * 75)
 		conn.SetKeepAlive(true)
-		e.hub.Add(conn, e.config.SendBufSize)
+		//rand.Uint.Seed(time.Now().UTC().UnixNano())
+		skt := socket.NewTCPSocket(conn, rand.Uint64(), e.config.SendQueueSize, e.config.ReadBufSize, e.config.WriteBufSize)
+		e.hub.Add(skt)
 		// ass connection to channel
 	}
 }
@@ -97,7 +104,7 @@ func (e *Endpoint) Start() error {
 func (e *Endpoint) Stop() error {
 	err := (e.listener).Close()
 	if err != nil {
-		log.Printf("Unable to stop host address %s\n. Error message %s",
+		log.Printf("Endpoint, Unable to stop host address %s\n. Error message %s",
 			e.config.GetHostAddress(), err.Error())
 		return err
 	}

@@ -8,6 +8,7 @@ type WData struct {
 
 // RData Hold information about input data
 type RData struct {
+	MsgType  byte
 	Data     []byte
 	SourceID uint64
 }

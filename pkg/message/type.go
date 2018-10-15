@@ -6,7 +6,7 @@ import "errors"
 type MsgType byte
 
 var (
-	// For connection setup operations.
+	// ErrParsStream reporesent error on deserilize stream
 	ErrParsStream = errors.New("Stream cannot parse to message")
 )
 
@@ -18,9 +18,3 @@ const (
 	// RelayMgsCode is code for id messages
 	RelayMgsCode MsgType = 3
 )
-
-type messager interface {
-	Type() byte
-	Length() uint32
-	Serialize() []byte
-}

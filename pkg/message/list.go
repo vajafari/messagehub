@@ -7,17 +7,17 @@ type ListRequestMsg struct {
 }
 
 // Type get type of list message
-func (msg *ListRequestMsg) Type() byte {
+func (msg ListRequestMsg) Type() byte {
 	return byte(ListMgsCode)
 }
 
 // Length get length of body for ListRequestMsg object
-func (msg *ListRequestMsg) Length() uint32 {
+func (msg ListRequestMsg) Length() uint32 {
 	return 0
 }
 
 // Serialize get frame bytes of ListRequestMsg
-func (msg *ListRequestMsg) Serialize() []byte {
+func (msg ListRequestMsg) Serialize() []byte {
 	return appendSlices(makeHeaderBytes(msg.Type(), msg.Length()), nil)
 }
 
@@ -27,12 +27,12 @@ type ListResponseMsg struct {
 }
 
 // Type get type of list message
-func (msg *ListResponseMsg) Type() byte {
+func (msg ListResponseMsg) Type() byte {
 	return byte(ListMgsCode)
 }
 
 // Length get length of body for ListResponseMsg object
-func (msg *ListResponseMsg) Length() uint32 {
+func (msg ListResponseMsg) Length() uint32 {
 	if len(msg.IDs) > 0 {
 		return uint32(len(msg.IDs) * 8)
 	}
@@ -40,10 +40,7 @@ func (msg *ListResponseMsg) Length() uint32 {
 }
 
 // Serialize get frame bytes of ListRequestMsg
-func (msg *ListResponseMsg) Serialize() []byte {
-	if len(msg.IDs) == 0 {
-		return nil
-	}
+func (msg ListResponseMsg) Serialize() []byte {
 	return appendSlices(makeHeaderBytes(msg.Type(), msg.Length()), getUnit64Bytes(msg.IDs))
 }
 

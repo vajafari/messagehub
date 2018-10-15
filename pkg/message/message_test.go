@@ -4,6 +4,12 @@ import (
 	"testing"
 )
 
+type messager interface {
+	Type() byte
+	Length() uint32
+	Serialize() []byte
+}
+
 func TestType(t *testing.T) {
 
 	var tests = []struct {
@@ -129,8 +135,8 @@ func TestSerialize(t *testing.T) {
 
 		{&ListRequestMsg{}, "ListRequestMsg", []byte{2, 0, 0, 0, 0}},
 
-		{&ListResponseMsg{}, "ListResponseMsg", nil},
-		{&ListResponseMsg{IDs: []uint64{}}, "ListResponseMsg", nil},
+		{&ListResponseMsg{}, "ListResponseMsg", []byte{2, 0, 0, 0, 0}},
+		{&ListResponseMsg{IDs: []uint64{}}, "ListResponseMsg", []byte{2, 0, 0, 0, 0}},
 		{&ListResponseMsg{IDs: []uint64{1}}, "ListResponseMsg", []byte{2, 8, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0}},
 		{&ListResponseMsg{IDs: []uint64{1, 2, 3}}, "ListResponseMsg", []byte{2, 24, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0}},
 
@@ -151,7 +157,7 @@ func TestSerialize(t *testing.T) {
 
 	for _, tt := range tests {
 		actual := tt.msg.Serialize()
-		if !checkEq(actual, tt.expected) {
+		if !checkEqByte(actual, tt.expected) {
 			t.Errorf("%s.Type: expected %v, actual %v", tt.typeName, tt.expected, actual)
 		}
 	}
@@ -174,7 +180,7 @@ func TestDeserializeIDRes(t *testing.T) {
 
 	for _, tt := range tests {
 		actual, err := DeserializeIDRes(tt.stream)
-		if !chekIDResponseMsgEq(actual, tt.msg) || err != tt.err {
+		if !ChkIDResponseMsgEq(actual, tt.msg) || err != tt.err {
 			t.Errorf("DeserializeIDRes: expected %d-%s, actual %d-%s", tt.msg.ID, tt.err, actual.ID, err)
 		}
 	}
@@ -199,16 +205,56 @@ func TestDeserializeListRes(t *testing.T) {
 
 	for _, tt := range tests {
 		actual, err := DeserializeListRes(tt.stream)
-		if !chekListResponseMsgEq(actual, tt.msg) || err != tt.err {
+		if !ChkListResponseMsgEq(actual, tt.msg) || err != tt.err {
 			t.Errorf("DeserializeIDRes: expected %v-%s, actual %d-%s", tt.msg.IDs, tt.err, actual.IDs, err)
 		}
 	}
 }
 
-func chekIDResponseMsgEq(a, b IDResponseMsg) bool {
-	return a.ID == b.ID
+func TestDeserializeRelayReq(t *testing.T) {
+	var tests = []struct {
+		stream []byte
+		msg    RelayRequestMsg
+		err    error
+	}{
+		{nil, RelayRequestMsg{}, ErrParsStream},
+		{[]byte{}, RelayRequestMsg{}, ErrParsStream},
+		{[]byte{1, 2, 3, 4}, RelayRequestMsg{}, ErrParsStream},
+		{[]byte{1, 2, 3, 4, 5, 6, 7, 8, 9}, RelayRequestMsg{}, ErrParsStream},
+		{[]byte{0, 2, 3, 4, 5, 6, 7, 8, 9, 1}, RelayRequestMsg{}, ErrParsStream},
+		{[]byte{2, 1, 0, 0, 0, 0, 0, 0, 0, 200}, RelayRequestMsg{}, ErrParsStream},
+		{[]byte{2, 1, 0, 0, 0, 0, 0, 0, 0, 72, 196, 124, 38, 231, 35, 0, 0}, RelayRequestMsg{}, ErrParsStream},
+		{[]byte{1, 1, 0, 0, 0, 0, 0, 0, 0, 200}, RelayRequestMsg{IDs: []uint64{1}, Data: []byte{200}}, nil},
+		{[]byte{1, 1, 0, 0, 0, 0, 0, 0, 0, 72, 196, 124, 38, 231, 35, 0, 0, 200, 201, 202, 203, 204, 205}, RelayRequestMsg{IDs: []uint64{1}, Data: []byte{72, 196, 124, 38, 231, 35, 0, 0, 200, 201, 202, 203, 204, 205}}, nil},
+		{[]byte{2, 1, 0, 0, 0, 0, 0, 0, 0, 72, 196, 124, 38, 231, 35, 0, 0, 200, 201, 202, 203, 204, 205}, RelayRequestMsg{IDs: []uint64{1, 39475690128456}, Data: []byte{200, 201, 202, 203, 204, 205}}, nil},
+	}
+
+	for _, tt := range tests {
+		actual, err := DeserializeRelayReq(tt.stream)
+		if !ChkRelayRequestMsgEq(actual, tt.msg) || err != tt.err {
+			t.Errorf("DeserializeRelayReq: expected %v-%v-%s, actual %v-%v-%s", tt.msg.IDs, tt.msg.Data, tt.err, actual.IDs, actual.Data, err)
+		}
+	}
 }
 
-func chekListResponseMsgEq(a, b ListResponseMsg) bool {
-	return checkEqUint64(a.IDs, b.IDs)
+func TestDeserializeRelayRes(t *testing.T) {
+	var tests = []struct {
+		stream []byte
+		msg    RelayResponseMsg
+		err    error
+	}{
+		{nil, RelayResponseMsg{}, ErrParsStream},
+		{[]byte{}, RelayResponseMsg{}, ErrParsStream},
+		{[]byte{1, 2, 3, 4}, RelayResponseMsg{}, ErrParsStream},
+		{[]byte{1, 0, 0, 0, 0, 0, 0, 0}, RelayResponseMsg{}, ErrParsStream},
+		{[]byte{1, 0, 0, 0, 0, 0, 0, 0, 72, 196, 124, 38, 231, 35, 0, 0}, RelayResponseMsg{SenderID: 1, Data: []byte{72, 196, 124, 38, 231, 35, 0, 0}}, nil},
+		{[]byte{72, 196, 124, 38, 231, 35, 0, 0, 35, 0, 0, 200, 201, 202, 203, 204, 205}, RelayResponseMsg{SenderID: 39475690128456, Data: []byte{35, 0, 0, 200, 201, 202, 203, 204, 205}}, nil},
+	}
+
+	for _, tt := range tests {
+		actual, err := DeserializeRelayRes(tt.stream)
+		if !ChkRelayResponseMsgEq(actual, tt.msg) || err != tt.err {
+			t.Errorf("DeserializeRelayReq: expected %d-%v-%s, actual %d-%v-%s", tt.msg.SenderID, tt.msg.Data, tt.err, actual.SenderID, actual.Data, err)
+		}
+	}
 }
