@@ -1,6 +1,13 @@
 package message
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+)
+
+const (
+	// ListMaxItems max length of data
+	ListMaxItems int = 131072
+)
 
 // ListRequestMsg represent request from client to get list of connected clients
 type ListRequestMsg struct {
@@ -11,14 +18,9 @@ func (msg ListRequestMsg) Type() byte {
 	return byte(ListMgsCode)
 }
 
-// Length get length of body for ListRequestMsg object
-func (msg ListRequestMsg) Length() uint32 {
-	return 0
-}
-
-// Serialize get frame bytes of ListRequestMsg
-func (msg ListRequestMsg) Serialize() []byte {
-	return appendSlices(makeHeaderBytes(msg.Type(), msg.Length()), nil)
+// Data get frame bytes of ListRequestMsg
+func (msg ListRequestMsg) Data() ([]byte, error) {
+	return nil, nil
 }
 
 // ListResponseMsg represent response of server to client return list of connected client
@@ -31,17 +33,12 @@ func (msg ListResponseMsg) Type() byte {
 	return byte(ListMgsCode)
 }
 
-// Length get length of body for ListResponseMsg object
-func (msg ListResponseMsg) Length() uint32 {
-	if len(msg.IDs) > 0 {
-		return uint32(len(msg.IDs) * 8)
+// Data get frame bytes of ListRequestMsg
+func (msg ListResponseMsg) Data() ([]byte, error) {
+	if len(msg.IDs) > ListMaxItems {
+		return nil, ErrInvalidData
 	}
-	return 0
-}
-
-// Serialize get frame bytes of ListRequestMsg
-func (msg ListResponseMsg) Serialize() []byte {
-	return appendSlices(makeHeaderBytes(msg.Type(), msg.Length()), getUnit64Bytes(msg.IDs))
+	return getUnit64Bytes(msg.IDs), nil
 }
 
 // DeserializeListRes convert stream of bytes to ListResponseMsg

@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	maxIDMsgLen    uint32 = 0       // Max length for id message in hub
-	maxListMsgLen  uint32 = 0       // Max length for list message in hub
-	maxRelayMsgLen uint32 = 1050617 // Max length for list message (1024 * 1024) + (255 * 8) + 1
+	maxIDMsgLen   uint32 = 0 // Max length for id message in hub
+	maxListMsgLen uint32 = 0 // Max length for list message in hub
+	// Max length for relay message (1024 * 1024) + (255 * 8) + 1
+	maxRelayMsgLen uint32 = uint32(message.RelayMaxBodySize + (message.RelayMaxReciverCount * 8) + 1)
 )
 
 // Hub is connection manager of specific server
@@ -79,7 +80,7 @@ func (h *Hub) Add(skt socket.Socket) error {
 func (h *Hub) readHandler() {
 	log.Println("Hub, Starting hub READER handler Go routine")
 	for rData := range h.readChan {
-		switch rData.MsgType {
+		switch rData.Pkt.Type() {
 		case byte(message.IDMgsCode):
 			h.handleIDReq(rData)
 		case byte(message.ListMgsCode):
@@ -142,11 +143,15 @@ func (h *Hub) handleRelayReq(reqData socket.RData) {
 			return
 		}
 	}
-
-	msg, err := message.DeserializeRelayReq(reqData.Data)
+	data, err := reqData.Pkt.Data()
+	if err != nil {
+		log.Printf("Hub, error on DeserializeRelayReq of relay message from socket {%d}\n", reqData.SourceID)
+		return
+	}
+	msg, err := message.DeserializeRelayReq(data)
 	if err == nil {
 		rspMsg := message.RelayResponseMsg{
-			Data:     msg.Data,
+			Body:     msg.Body,
 			SenderID: reqData.SourceID,
 		}
 		for _, id := range msg.IDs {
@@ -166,7 +171,7 @@ func (h *Hub) writeHandler() {
 	log.Println("Hub, starting WRITER handler Go routine")
 	for wData := range h.writeChan {
 
-		if wData.Frm.Type() == byte(message.IDMgsCode) {
+		if wData.Pkt.Type() == byte(message.IDMgsCode) {
 			h.mutx.Lock()
 			defer h.mutx.Unlock()
 			if sktInfo, ok := h.socketRepo[wData.SourceID]; ok {

@@ -10,13 +10,25 @@ import (
 	"github.com/vajafari/messagehub/pkg/socket"
 )
 
+type packetMock struct {
+	typ  byte
+	data []byte
+}
+
+func (pkt packetMock) Type() byte {
+	return pkt.typ
+}
+func (pkt packetMock) Data() ([]byte, error) {
+	return pkt.data, nil
+}
+
 type socketMock struct {
 	id         uint64
 	readChan   chan<- socket.RData
 	writeChan  chan<- socket.WData
 	probChan   chan<- socket.ProbData
 	msgTypeLen map[byte]uint32
-	frames     []socket.Frame
+	packets    []socket.Packet
 }
 
 func (s *socketMock) Start(writeChan chan<- socket.WData, readChan chan<- socket.RData, probChan chan<- socket.ProbData, msgTypeLen map[byte]uint32) {
@@ -24,7 +36,7 @@ func (s *socketMock) Start(writeChan chan<- socket.WData, readChan chan<- socket
 	s.writeChan = writeChan
 	s.probChan = probChan
 	s.msgTypeLen = msgTypeLen
-	s.frames = make([]socket.Frame, 0)
+	s.packets = make([]socket.Packet, 0)
 }
 
 func (s *socketMock) Close() error {
@@ -36,25 +48,29 @@ func (s *socketMock) ID() uint64 {
 func (s *socketMock) SetID(id uint64) {
 	s.id = id
 }
-func (s *socketMock) Send(frm socket.Frame) {
-	s.frames = append(s.frames, frm)
+func (s *socketMock) Send(pkt socket.Packet) {
+	s.packets = append(s.packets, pkt)
 }
 
-func (s *socketMock) clearFrames() {
-	s.frames = make([]socket.Frame, 0)
+func (s *socketMock) clearPackets() {
+	s.packets = make([]socket.Packet, 0)
 }
 
 func (s *socketMock) simulateReadData(bb []byte) {
 	if len(bb) > 1 {
 		s.readChan <- socket.RData{
-			MsgType:  bb[0],
-			Data:     bb[1:],
+			Pkt: packetMock{
+				data: bb[1:],
+				typ:  bb[0],
+			},
 			SourceID: s.ID(),
 		}
 	} else {
 		s.readChan <- socket.RData{
-			MsgType:  bb[0],
-			Data:     nil,
+			Pkt: packetMock{
+				data: nil,
+				typ:  bb[0],
+			},
 			SourceID: s.ID(),
 		}
 	}
@@ -75,38 +91,42 @@ func TestReadHandler(t *testing.T) {
 	// Simulate message Id
 	sMock1.simulateReadData([]byte{byte(message.IDMgsCode)})
 	time.Sleep(20 * time.Millisecond)
-	if len(sMock1.frames) != 1 {
+	if len(sMock1.packets) != 1 {
 		log.Fatal("Error on response to IDRequestMsg")
 	}
-	if len(sMock2.frames) > 0 || len(sMock3.frames) > 0 || len(sMock4.frames) > 0 {
+	if len(sMock2.packets) > 0 || len(sMock3.packets) > 0 || len(sMock4.packets) > 0 {
 		log.Fatal("Error on response to IDRequestMsg. Id message response sent to wrong clients")
 	}
 
-	if sMock1.frames[0].Type() != byte(message.IDMgsCode) {
+	if sMock1.packets[0].Type() != byte(message.IDMgsCode) {
 		log.Fatal("Error on response to IDRequestMsg. Response message code is not valid")
 	}
 
-	idRespMsg, err := message.DeserializeIDRes(sMock1.frames[0].Serialize()[5:])
+	dataSMock, err := sMock1.packets[0].Data()
+	if err != nil {
+		log.Fatal("Error on response to IDRequestMsg. Cannot deserialize message on client")
+	}
+	idRespMsg, err := message.DeserializeIDRes(dataSMock)
 	if err != nil {
 		log.Fatal("Error on response to IDRequestMsg. Cannot deserialize message on client")
 	}
 	if idRespMsg.ID != sMock1.id {
 		log.Fatal("Error on response to IDRequestMsg. Wrong Id sent to client")
 	}
-	sMock1.clearFrames()
+	sMock1.clearPackets()
 	sMock1.simulateReadData([]byte{byte(message.IDMgsCode), 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
 	time.Sleep(20 * time.Millisecond)
-	if len(sMock1.frames) != 1 {
+	if len(sMock1.packets) != 1 {
 		log.Fatal("Error on response to IDRequestMsg")
 	}
 
 	// Test List Message
-	sMock1.clearFrames()
+	sMock1.clearPackets()
 	//Request from unidentified socket
 	sMock1.simulateReadData([]byte{byte(message.ListMgsCode)})
 	time.Sleep(20 * time.Millisecond)
 
-	if len(sMock1.frames) > 0 || len(sMock2.frames) > 0 || len(sMock3.frames) > 0 || len(sMock4.frames) > 0 {
+	if len(sMock1.packets) > 0 || len(sMock2.packets) > 0 || len(sMock3.packets) > 0 || len(sMock4.packets) > 0 {
 		log.Fatal("Error on response to ListRequestMsg. Generate list response based on request from unindentified socket")
 	}
 
@@ -114,16 +134,20 @@ func TestReadHandler(t *testing.T) {
 	h.socketRepo[1].IsIdentified = true
 	sMock1.simulateReadData([]byte{byte(message.ListMgsCode)})
 	time.Sleep(20 * time.Millisecond)
-	if len(sMock1.frames) != 1 {
+	if len(sMock1.packets) != 1 {
 		log.Fatal("Error on response to List request")
 	}
-	if sMock1.frames[0].Type() != byte(message.ListMgsCode) {
+	if sMock1.packets[0].Type() != byte(message.ListMgsCode) {
 		log.Fatal("Error on response to ListRequestMsg. Response message code is not valid")
 	}
-	if len(sMock2.frames) > 0 || len(sMock3.frames) > 0 || len(sMock4.frames) > 0 {
+	if len(sMock2.packets) > 0 || len(sMock3.packets) > 0 || len(sMock4.packets) > 0 {
 		log.Fatal("Error on response to ListRequestMsg. List message response sent to wrong clients")
 	}
-	listRespMsg, err := message.DeserializeListRes(sMock1.frames[0].Serialize()[5:])
+	dataSMock, err = sMock1.packets[0].Data()
+	if err != nil {
+		log.Fatal("Error on response to ListRequestMsg. Cannot deserialize message on client")
+	}
+	listRespMsg, err := message.DeserializeListRes(dataSMock)
 	if err != nil {
 		log.Fatal("Error on response to ListRequestMsg. Cannot deserialize message on client")
 	}
@@ -131,20 +155,24 @@ func TestReadHandler(t *testing.T) {
 		log.Fatal("Error on response to ListRequestMsg. Wrong List message recieved on client")
 	}
 
-	sMock1.clearFrames()
+	sMock1.clearPackets()
 	h.socketRepo[3].IsIdentified = true
 	sMock1.simulateReadData([]byte{byte(message.ListMgsCode)})
 	time.Sleep(20 * time.Millisecond)
-	if len(sMock1.frames) != 1 {
+	if len(sMock1.packets) != 1 {
 		log.Fatal("Error on response to List request")
 	}
-	if sMock1.frames[0].Type() != byte(message.ListMgsCode) {
+	if sMock1.packets[0].Type() != byte(message.ListMgsCode) {
 		log.Fatal("Error on response to ListRequestMsg. Response message code is not valid")
 	}
-	if len(sMock2.frames) > 0 || len(sMock3.frames) > 0 || len(sMock4.frames) > 0 {
+	if len(sMock2.packets) > 0 || len(sMock3.packets) > 0 || len(sMock4.packets) > 0 {
 		log.Fatal("Error on response to ListRequestMsg. List message response sent to wrong clients")
 	}
-	listRespMsg, err = message.DeserializeListRes(sMock1.frames[0].Serialize()[5:])
+	dataSMock, err = sMock1.packets[0].Data()
+	if err != nil {
+		log.Fatal("Error on response to ListRequestMsg. Cannot deserialize message on client")
+	}
+	listRespMsg, err = message.DeserializeListRes(dataSMock)
 	if err != nil {
 		log.Fatal("Error on response to ListRequestMsg. Cannot deserialize message on client")
 	}
@@ -153,10 +181,10 @@ func TestReadHandler(t *testing.T) {
 	}
 
 	// Test Relay Request
-	sMock1.clearFrames()
-	sMock2.clearFrames()
-	sMock3.clearFrames()
-	sMock4.clearFrames()
+	sMock1.clearPackets()
+	sMock2.clearPackets()
+	sMock3.clearPackets()
+	sMock4.clearPackets()
 	h.socketRepo[1].IsIdentified = false
 	h.socketRepo[2].IsIdentified = false
 	h.socketRepo[3].IsIdentified = false
@@ -165,65 +193,70 @@ func TestReadHandler(t *testing.T) {
 	sMock1.simulateReadData([]byte{byte(message.RelayMgsCode), 2, 2, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7})
 	time.Sleep(20 * time.Millisecond)
 
-	if len(sMock1.frames) > 0 || len(sMock2.frames) > 0 || len(sMock3.frames) > 0 || len(sMock4.frames) > 0 {
+	if len(sMock1.packets) > 0 || len(sMock2.packets) > 0 || len(sMock3.packets) > 0 || len(sMock4.packets) > 0 {
 		log.Fatal("Error on response to RelayRequestMsg. Generate relay response based on request from unindentified socket")
 	}
 
 	h.socketRepo[1].IsIdentified = true
-	sMock1.clearFrames()
+	sMock1.clearPackets()
 	sMock1.simulateReadData([]byte{byte(message.RelayMgsCode), 2, 2, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7})
 	time.Sleep(20 * time.Millisecond)
-	if len(sMock1.frames) > 0 || len(sMock2.frames) > 0 || len(sMock3.frames) > 0 || len(sMock4.frames) > 0 {
+	if len(sMock1.packets) > 0 || len(sMock2.packets) > 0 || len(sMock3.packets) > 0 || len(sMock4.packets) > 0 {
 		log.Fatal("Error on response to ListRequestMsg. List message response sent to wrong clients")
 	}
 
-	sMock1.clearFrames()
-	sMock2.clearFrames()
-	sMock3.clearFrames()
-	sMock4.clearFrames()
+	sMock1.clearPackets()
+	sMock2.clearPackets()
+	sMock3.clearPackets()
+	sMock4.clearPackets()
 	h.socketRepo[3].IsIdentified = true
 	h.socketRepo[4].IsIdentified = true
 	sMock1.simulateReadData([]byte{byte(message.RelayMgsCode), 3, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7})
 
 	time.Sleep(20 * time.Millisecond)
-	if len(sMock1.frames) > 0 || len(sMock2.frames) > 0 {
+	if len(sMock1.packets) > 0 || len(sMock2.packets) > 0 {
 		log.Fatal("Error on response to RelayRequestMsg. Id message response sent to wrong clients")
 	}
-	if len(sMock3.frames) == 0 || len(sMock4.frames) == 0 {
+	if len(sMock3.packets) == 0 || len(sMock4.packets) == 0 {
 		log.Fatal("Error on response to RelayRequestMsg")
 	}
-	if sMock3.frames[0].Type() != byte(message.RelayMgsCode) {
+	if sMock3.packets[0].Type() != byte(message.RelayMgsCode) {
 		log.Fatal("Error on response to RelayRequestMsg. Response message code is not valid")
 	}
-	if sMock4.frames[0].Type() != byte(message.RelayMgsCode) {
+	if sMock4.packets[0].Type() != byte(message.RelayMgsCode) {
 		log.Fatal("Error on response to RelayRequestMsg. Response message code is not valid")
 	}
-
-	relayRespMsg, err := message.DeserializeRelayRes(sMock3.frames[0].Serialize()[5:])
+	dataSMock, err = sMock3.packets[0].Data()
 	if err != nil {
 		log.Fatal("Error on response to RelayRequestMsg. Cannot deserialize message on client")
 	}
-	if !message.ChkRelayResponseMsgEq(relayRespMsg, message.RelayResponseMsg{SenderID: 1, Data: []byte{1, 2, 3, 4, 5, 6, 7}}) {
+	relayRespMsg, err := message.DeserializeRelayRes(dataSMock)
+	if err != nil {
+		log.Fatal("Error on response to RelayRequestMsg. Cannot deserialize message on client")
+	}
+	if !message.ChkRelayResponseMsgEq(relayRespMsg, message.RelayResponseMsg{SenderID: 1, Body: []byte{1, 2, 3, 4, 5, 6, 7}}) {
 		log.Fatal("Error on response to ListRequestMsg. Cannot deserialize message on client")
 	}
-
-	relayRespMsg, err = message.DeserializeRelayRes(sMock4.frames[0].Serialize()[5:])
+	dataSMock, err = sMock4.packets[0].Data()
 	if err != nil {
 		log.Fatal("Error on response to RelayRequestMsg. Cannot deserialize message on client")
 	}
-	if !message.ChkRelayResponseMsgEq(relayRespMsg, message.RelayResponseMsg{SenderID: 1, Data: []byte{1, 2, 3, 4, 5, 6, 7}}) {
+	relayRespMsg, err = message.DeserializeRelayRes(dataSMock)
+	if err != nil {
+		log.Fatal("Error on response to RelayRequestMsg. Cannot deserialize message on client")
+	}
+	if !message.ChkRelayResponseMsgEq(relayRespMsg, message.RelayResponseMsg{SenderID: 1, Body: []byte{1, 2, 3, 4, 5, 6, 7}}) {
 		log.Fatal("Error on response to ListRequestMsg. Cannot deserialize message on client")
 	}
 
 	//Test incorect message format
-	sMock1.clearFrames()
-	sMock2.clearFrames()
-	sMock3.clearFrames()
-	sMock4.clearFrames()
+	sMock1.clearPackets()
+	sMock2.clearPackets()
+	sMock3.clearPackets()
+	sMock4.clearPackets()
 	sMock1.simulateReadData([]byte{byte(message.RelayMgsCode), 10, 2, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7})
 	time.Sleep(20 * time.Millisecond)
-	if len(sMock1.frames) > 0 || len(sMock2.frames) > 0 || len(sMock3.frames) > 0 || len(sMock4.frames) > 0 {
+	if len(sMock1.packets) > 0 || len(sMock2.packets) > 0 || len(sMock3.packets) > 0 || len(sMock4.packets) > 0 {
 		log.Fatal("Error on response to RelayRequestMsg. Shouldnot reponse to invalid message")
 	}
-
 }

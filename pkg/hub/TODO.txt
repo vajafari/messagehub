@@ -1,4 +1,6 @@
-// timeout in sending to channel
 //Benchmark test
-// Pipe network connection net.Ppie
+// Handle excpetion to not down services
 
+// بهشون بگم که چرا در پکیج مسیج ها در متد ها از پوینتر استفاده نکردم
+// براشون توضیح بدم برای جلوگیری از هک در لایه سوکت چه کرده ام
+// ساختار دیتا را برایشان توضیخ دهم

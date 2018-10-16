@@ -32,14 +32,6 @@ func checkEqUint64(a, b []uint64) bool {
 	return true
 }
 
-func makeHeaderBytes(messageType byte, length uint32) []byte {
-	bb := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bb, uint32(length))
-	res := []byte{messageType, 0, 0, 0, 0}
-	copy(res[1:], bb)
-	return res
-}
-
 func appendSlices(s1 []byte, s2 []byte) []byte {
 	bb := make([]byte, len(s1)+len(s2))
 	if len(s1) > 0 {
@@ -91,10 +83,10 @@ func ChkListResponseMsgEq(a, b ListResponseMsg) bool {
 
 // ChkRelayRequestMsgEq check equeality of RelayRequestMsg message
 func ChkRelayRequestMsgEq(a, b RelayRequestMsg) bool {
-	return checkEqUint64(a.IDs, b.IDs) && checkEqByte(a.Data, b.Data)
+	return checkEqUint64(a.IDs, b.IDs) && checkEqByte(a.Body, b.Body)
 }
 
 // ChkRelayResponseMsgEq check equeality of RelayResponseMsg message
 func ChkRelayResponseMsgEq(a, b RelayResponseMsg) bool {
-	return checkEqByte(a.Data, b.Data) && a.SenderID == b.SenderID
+	return checkEqByte(a.Body, b.Body) && a.SenderID == b.SenderID
 }

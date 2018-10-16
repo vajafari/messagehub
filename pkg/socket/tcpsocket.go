@@ -2,6 +2,7 @@ package socket
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,11 @@ import (
 const (
 	readTimeout  = 2 * time.Hour
 	writeTimeout = 120 * time.Second
+	prefixLen    = 7
+)
+
+var (
+	packetPrefix = []byte{83, 79, 70, 83, 79, 70, 10}
 )
 
 // TCPSocket holds information a connection betwen client and server
@@ -21,15 +27,15 @@ const (
 type TCPSocket struct {
 	conn      *net.TCPConn    // TCP connection.
 	id        uint64          // Assigned ID to current TCPSocket
-	send      chan Frame      // Outgoing frames queue. We use a buffered channel of frames as thread-safe FIFO queue
+	send      chan Packet     // Outgoing packets queue. We use a buffered channel of packets as thread-safe FIFO queue
 	closeGoes chan bool       // This channel use to stop all go routines of TCPSocekt
 	readChan  chan<- RData    // if successfull read happen signal send through this channle
 	writeChan chan<- WData    // if successfull write happen signal send through this channle
 	probChan  chan<- ProbData // if error occur signal send through this channle
 	// This is map that specify how musch data is valid for ech type of message
 	// We use this to prevent client from sending illogical data.
-	// Each frame type (first byte of frame) has max lenght
-	msgTypeLen   map[byte]uint32
+	// Each packet type (first byte of packet) has max lenght
+	msgTypeLen   map[byte]int
 	readBufSize  int
 	writeBufSize int
 }
@@ -38,7 +44,7 @@ type TCPSocket struct {
 func NewTCPSocket(conn *net.TCPConn, id uint64, sendChanSize int, readBufSize int, writeBufSize int) *TCPSocket {
 	s := TCPSocket{
 		conn:         conn,
-		send:         make(chan Frame, sendChanSize),
+		send:         make(chan Packet, sendChanSize),
 		closeGoes:    make(chan bool, 1),
 		readBufSize:  readBufSize,
 		writeBufSize: writeBufSize,
@@ -51,7 +57,7 @@ func NewTCPSocket(conn *net.TCPConn, id uint64, sendChanSize int, readBufSize in
 }
 
 //Start set channel to communication with socket manager
-func (s *TCPSocket) Start(writeChan chan<- WData, readChan chan<- RData, probChan chan<- ProbData, msgTypeLen map[byte]uint32) {
+func (s *TCPSocket) Start(writeChan chan<- WData, readChan chan<- RData, probChan chan<- ProbData, msgTypeLen map[byte]int) {
 	if s.writeChan != nil || s.readChan != nil || s.probChan != nil || s.msgTypeLen != nil {
 		return
 	}
@@ -65,9 +71,9 @@ func (s *TCPSocket) Start(writeChan chan<- WData, readChan chan<- RData, probCha
 }
 
 //Send Add packet to send queue
-func (s *TCPSocket) Send(frm Frame) {
-	s.send <- frm
-	log.Printf("New frame is pushed to send queue for socket %d\n", s.id)
+func (s *TCPSocket) Send(pkt Packet) {
+	s.send <- pkt
+	log.Printf("New packet is pushed to send queue for socket %d\n", s.id)
 }
 
 // Close tcpSocket and release all the resources
@@ -97,38 +103,40 @@ func (s *TCPSocket) SetID(id uint64) {
 	log.Printf("ITcpSocket, D ser for socket %d\n", s.id)
 }
 
-func getFramePrefix() []byte {
-	return []byte{83, 79, 70, 10}
-}
-
 func (s *TCPSocket) writer() {
 	log.Printf("TcpSocket, Go routine writer started for socket %d\n", s.id)
-	prefix := getFramePrefix()
 	bufio.NewWriterSize(s.conn, s.writeBufSize)
 	buf := bufio.NewWriter(s.conn)
 	for {
-		//When we close 'send' channel, It still received buffered frames so
+		//When we close 'send' channel, It still received buffered packets so
 		//writer go routine continue to work. we use following select to make sure that
 		//this go routine closes immediately when we call TCPSocket close method
 		select {
 		case <-s.closeGoes:
 			log.Printf("TcpSocket, Close signal recieved by writer go routine of socket %d. Write routine terminated\n", s.id)
 			return
-		case frm := <-s.send:
+		case pkt := <-s.send:
 			log.Printf("TcpSocket, Sending packet process start from tcpSocket %d\n", s.id)
-			if frm == nil {
+			if pkt == nil {
 				continue
 			}
-			bb := frm.Serialize()
-			if len(bb) == 0 {
-				continue
+			// Prepare data for sending on wire!!!
+			bb, err := pkt.Data()
+			if err == nil {
+				log.Printf("Error on get data from packet in socket %d\n", s.id)
 			}
-			bb = append(prefix, bb...)
 
+			pktBytes := make([]byte, prefixLen+HeaderLen+len(bb))
+			copy(pktBytes, packetPrefix)     //Prefix
+			pktBytes[prefixLen] = pkt.Type() //Type
+			lenBytes := make([]byte, 4)
+			binary.LittleEndian.PutUint32(lenBytes, uint32(len(bb)))
+			copy(pktBytes[prefixLen+1:], lenBytes) //Lent
+			copy(pktBytes[prefixLen+HeaderLen:], bb)
 			nn, err := s.writeWithRetry(buf, bb, writeTimeout)
 			if err != nil {
 				res := ProbData{
-					Frm:      frm,
+					Pkt:      pkt,
 					SourceID: s.id,
 					Err:      err,
 				}
@@ -144,7 +152,7 @@ func (s *TCPSocket) writer() {
 
 			} else {
 				res := WData{
-					Frm:      frm,
+					Pkt:      pkt,
 					SourceID: s.id,
 				}
 				log.Printf("TcpSocket, SUCCESSFULL! Sent  message to tcpSocket %d. Message len was %d", s.id, nn)
@@ -152,44 +160,6 @@ func (s *TCPSocket) writer() {
 			}
 		}
 	}
-}
-
-func (s *TCPSocket) reader() {
-	//We make a buffered read to reduce read syscalls.
-	log.Printf("TcpSocket, Go routine reader started for socket %d\n", s.id)
-	buf := bufio.NewReaderSize(s.conn, s.readBufSize)
-	bb := make([]byte, s.readBufSize)
-	for {
-		select {
-		case <-s.closeGoes:
-			log.Printf("TcpSocket, Close signal recieved by reader go routine of socket %d. Write routine terminated\n.", s.id)
-			return
-		default:
-		}
-		s.conn.SetReadDeadline(time.Now().Add(readTimeout))
-		n, err := buf.Read(bb)
-		if err != nil {
-			s.probChan <- ProbData{
-				Err:      err,
-				SourceID: s.ID(),
-			}
-			fmt.Printf("TcpSocket, Error On Read %s\n", err.Error())
-			if err == io.EOF {
-				log.Printf("TCPSocket, EOF detected for socker %d. Read routine terminated\n", s.id)
-				return
-			}
-			if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
-				log.Printf("TCPSocket, TIMEOUT detected for socker %d. Read routine terminated\n", s.id)
-				return
-			}
-			//break
-		} else {
-			fmt.Printf("TcpSocket, %d bytes recieved\n", n)
-			fmt.Println(bb)
-		}
-
-	}
-
 }
 
 func (s *TCPSocket) writeWithRetry(buf *bufio.Writer, bb []byte, timeout time.Duration) (int, error) {
@@ -218,4 +188,201 @@ func (s *TCPSocket) writeWithRetry(buf *bufio.Writer, bb []byte, timeout time.Du
 		}
 	}
 	return nn, err
+}
+
+func (s *TCPSocket) reader() {
+	log.Printf("TcpSocket, Go routine reader started for socket %d\n", s.id)
+	bb := make([]byte, s.readBufSize)
+	buf := bufio.NewReaderSize(s.conn, s.readBufSize)
+	pi := packetInspector{}
+	pi.resetVariables()
+	for {
+		select {
+		case <-s.closeGoes:
+			log.Printf("TcpSocket, Close signal recieved by reader go routine of socket %d. Write routine terminated\n.", s.id)
+			return
+		default:
+		}
+		s.conn.SetReadDeadline(time.Now().Add(readTimeout))
+		n, err := buf.Read(bb)
+		if err != nil {
+			s.probChan <- ProbData{
+				Err:      err,
+				SourceID: s.ID(),
+			}
+			fmt.Printf("TcpSocket, Error On Read %s\n", err.Error())
+			if err == io.EOF {
+				log.Printf("TCPSocket, EOF detected for socker %d. Read routine terminated\n", s.id)
+				return
+			}
+			if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+				log.Printf("TCPSocket, TIMEOUT detected for socker %d. Read routine terminated\n", s.id)
+				return
+			}
+			//break
+		} else {
+			if n == 0 {
+				continue
+			}
+			fmt.Printf("TcpSocket, %d bytes recieved in socket\n", n)
+			packets := pi.inspect(bb[0:n], s.msgTypeLen)
+			if len(packets) > 0 {
+				for _, pkt := range packets {
+					s.readChan <- RData{
+						Pkt:      pkt,
+						SourceID: s.id,
+					}
+				}
+			}
+		}
+	}
+}
+
+type packetInspector struct {
+	completeFindPrefix bool
+	partialFindPrefix  bool
+	headerVerified     bool
+	prevPrefixCnt      int
+	lastIndexPrefix    int
+	currentPkgLen      int
+	curPkgHeader       []byte
+	curPkg             []byte
+}
+
+func (pi *packetInspector) resetVariables() {
+	pi.completeFindPrefix = false
+	pi.partialFindPrefix = false
+	pi.headerVerified = false
+	pi.prevPrefixCnt = 0
+	pi.lastIndexPrefix = 0
+	pi.currentPkgLen = 0
+	pi.curPkgHeader = make([]byte, 0)
+	pi.curPkg = make([]byte, 0)
+}
+
+func (pi *packetInspector) findPrefix(bb []byte) {
+	//p := packetInspector{}
+	if pi.completeFindPrefix {
+		return
+	}
+
+	if pi.partialFindPrefix && pi.prevPrefixCnt > 0 {
+		// There was a match with end of previous buffer
+		// so we must find remaining of pattern in start of current buffer
+		j := 0
+		for i := pi.prevPrefixCnt; i < prefixLen; i++ {
+			if j >= len(bb) {
+				return
+			}
+			if packetPrefix[i] != bb[j] {
+				break
+			}
+			pi.prevPrefixCnt++
+			if pi.prevPrefixCnt == len(packetPrefix) {
+				pi.completeFindPrefix = true
+				pi.partialFindPrefix = false
+				pi.prevPrefixCnt = 0
+				pi.lastIndexPrefix = j
+				break
+			}
+			j++
+		}
+	}
+	// Patten does not exists partially in previous
+	// buffer anf must find it in current buffer
+	for i := 0; i < len(bb); i++ {
+		if bb[i] == packetPrefix[0] {
+			pi.partialFindPrefix = true
+			pi.prevPrefixCnt = 1
+			for j := 1; j < prefixLen; j++ {
+				if j+i >= len(bb) {
+					return
+				}
+				if bb[i+j] != packetPrefix[j] {
+					pi.partialFindPrefix = false
+					pi.prevPrefixCnt = 0
+					break
+				}
+				pi.prevPrefixCnt++
+				if pi.prevPrefixCnt == prefixLen {
+					pi.completeFindPrefix = true
+					pi.partialFindPrefix = false
+					pi.prevPrefixCnt = 0
+					pi.lastIndexPrefix = i + j
+					return
+				}
+			}
+		}
+	}
+
+}
+
+func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPacket {
+	res := make([]rDataPacket, 0)
+	dataStartIndex := 0
+	if !pi.completeFindPrefix {
+		pi.findPrefix(bb)
+		if !pi.completeFindPrefix {
+			return res
+		}
+		dataStartIndex = pi.lastIndexPrefix + 1
+	}
+	if dataStartIndex >= len(bb) {
+		//aafter finding prefix we reach to the rnd of slice
+		return res
+	}
+	if !pi.headerVerified {
+		endOfHeader := 0
+		if len(pi.curPkgHeader) < HeaderLen {
+			// Incomplete header
+			if (len(pi.curPkgHeader) + len(bb[dataStartIndex:len(bb)])) < HeaderLen {
+				pi.curPkgHeader = append(pi.curPkgHeader, bb[dataStartIndex:len(bb)]...)
+				return res
+			}
+			endOfHeader := dataStartIndex + (HeaderLen - len(pi.curPkgHeader))
+			pi.curPkgHeader = append(pi.curPkgHeader, bb[dataStartIndex:endOfHeader]...)
+		}
+		msgTypeMaxLen, ok := msgTypeLen[pi.curPkgHeader[0]]
+		currentPkgLen := int(binary.LittleEndian.Uint32(pi.curPkgHeader[1:]))
+
+		if !ok || msgTypeMaxLen < currentPkgLen {
+			// Message type or message len is not valid
+			pi.resetVariables()
+			res = append(res, pi.inspect(bb[dataStartIndex:], msgTypeLen)...)
+			return res
+		}
+		pi.headerVerified = true
+		pi.currentPkgLen = currentPkgLen
+		dataStartIndex = endOfHeader
+		if currentPkgLen <= len(bb[dataStartIndex:]) {
+			pkt := rDataPacket{typ: pi.curPkgHeader[0], data: bb[dataStartIndex : dataStartIndex+currentPkgLen]}
+			res = append(res, pkt)
+			dataStartIndex += currentPkgLen
+			if dataStartIndex >= len(bb) {
+				//aafter finding prefix we reach to the rnd of slice
+				return res
+			}
+			pi.resetVariables()
+			res = append(res, pi.inspect(bb[dataStartIndex:], msgTypeLen)...)
+			return res
+		}
+		pi.curPkg = append(pi.curPkg, bb[dataStartIndex:]...)
+		return res
+	}
+	// message prefix and header find previously
+	// so just append to current package and search for next pckage
+	if pi.currentPkgLen > len(pi.curPkg)+len(bb) {
+		pi.curPkg = append(pi.curPkg, bb...)
+		return res
+	}
+	remainLen := pi.currentPkgLen - len(pi.curPkg)
+	pkt := rDataPacket{typ: pi.curPkgHeader[0], data: bb[0:remainLen]}
+	res = append(res, pkt)
+	if remainLen >= len(bb) {
+		//aafter finding prefix we reach to the rnd of slice
+		return res
+	}
+	pi.resetVariables()
+	res = append(res, pi.inspect(bb[dataStartIndex:], msgTypeLen)...)
+	return res
 }

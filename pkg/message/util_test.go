@@ -28,25 +28,6 @@ func TestCheckEqByte(t *testing.T) {
 	}
 }
 
-func TestMakeHeaderBytes(t *testing.T) {
-	var tests = []struct {
-		messageType byte
-		length      uint32
-		expected    []byte // expected result
-	}{
-		{0, 0, []byte{0, 0, 0, 0, 0}},
-		{1, 0, []byte{1, 0, 0, 0, 0}},
-		{10, 256, []byte{10, 0, 1, 0, 0}},
-		{186, 986458765, []byte{186, 141, 42, 204, 58}},
-	}
-	for _, tt := range tests {
-		actual := makeHeaderBytes(tt.messageType, tt.length)
-		if !checkEqByte(actual, tt.expected) {
-			t.Errorf("makeHeaderBytes: expected %v, actual %v", tt.expected, actual)
-		}
-	}
-}
-
 func TestAppendSlices(t *testing.T) {
 	var tests = []struct {
 		first    []byte // input
@@ -156,32 +137,32 @@ func TestChkRelayRequestMsgEq(t *testing.T) {
 		b        RelayRequestMsg // input
 		expected bool            // expected result
 	}{
-		{RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, true},
-		{RelayRequestMsg{Data: []byte{}}, RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, true},
-		{RelayRequestMsg{IDs: []uint64{}}, RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, true},
-		{RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, RelayRequestMsg{Data: []byte{}}, true},
-		{RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, RelayRequestMsg{IDs: []uint64{}}, true},
-		{RelayRequestMsg{}, RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, true},
-		{RelayRequestMsg{IDs: []uint64{}}, RelayRequestMsg{Data: []byte{}}, true},
-		{RelayRequestMsg{IDs: []uint64{}, Data: []byte{}}, RelayRequestMsg{}, true},
-		{RelayRequestMsg{}, RelayRequestMsg{Data: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}, Body: []byte{}}, RelayRequestMsg{IDs: []uint64{}, Body: []byte{}}, true},
+		{RelayRequestMsg{Body: []byte{}}, RelayRequestMsg{IDs: []uint64{}, Body: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}}, RelayRequestMsg{IDs: []uint64{}, Body: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}, Body: []byte{}}, RelayRequestMsg{Body: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}, Body: []byte{}}, RelayRequestMsg{IDs: []uint64{}}, true},
+		{RelayRequestMsg{}, RelayRequestMsg{IDs: []uint64{}, Body: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}}, RelayRequestMsg{Body: []byte{}}, true},
+		{RelayRequestMsg{IDs: []uint64{}, Body: []byte{}}, RelayRequestMsg{}, true},
+		{RelayRequestMsg{}, RelayRequestMsg{Body: []byte{}}, true},
 		{RelayRequestMsg{IDs: []uint64{}}, RelayRequestMsg{}, true},
 		{RelayRequestMsg{}, RelayRequestMsg{}, true},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, true},
-		{RelayRequestMsg{Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{Data: []byte{4, 5, 6}}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}}, false},
-		{RelayRequestMsg{}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3}}, RelayRequestMsg{Data: []byte{4, 5, 6}}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{}, false},
-		{RelayRequestMsg{}, RelayRequestMsg{Data: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, true},
+		{RelayRequestMsg{Body: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, RelayRequestMsg{Body: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}}, false},
+		{RelayRequestMsg{}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}}, RelayRequestMsg{Body: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, RelayRequestMsg{}, false},
+		{RelayRequestMsg{}, RelayRequestMsg{Body: []byte{4, 5, 6}}, false},
 		{RelayRequestMsg{IDs: []uint64{1, 2, 3}}, RelayRequestMsg{}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 4}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 7}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3, 4}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, false},
-		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Data: []byte{4, 5, 6, 7}}, false},
-		{RelayRequestMsg{IDs: []uint64{3, 5, 7}, Data: []byte{1, 3, 5}}, RelayRequestMsg{IDs: []uint64{2, 4, 6}, Data: []byte{6, 8, 9}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 4}, Body: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 7}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3, 4}, Body: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, false},
+		{RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6}}, RelayRequestMsg{IDs: []uint64{1, 2, 3}, Body: []byte{4, 5, 6, 7}}, false},
+		{RelayRequestMsg{IDs: []uint64{3, 5, 7}, Body: []byte{1, 3, 5}}, RelayRequestMsg{IDs: []uint64{2, 4, 6}, Body: []byte{6, 8, 9}}, false},
 	}
 	for _, tt := range tests {
 		actual := ChkRelayRequestMsgEq(tt.a, tt.b)
@@ -198,15 +179,15 @@ func TestChkRelayResponseMsgEq(t *testing.T) {
 		expected bool             // expected result
 	}{
 		{RelayResponseMsg{}, RelayResponseMsg{}, true},
-		{RelayResponseMsg{Data: []byte{}}, RelayResponseMsg{Data: []byte{}}, true},
-		{RelayResponseMsg{}, RelayResponseMsg{Data: []byte{}}, true},
-		{RelayResponseMsg{Data: []byte{}}, RelayResponseMsg{}, true},
-		{RelayResponseMsg{}, RelayResponseMsg{Data: []byte{1}}, false},
-		{RelayResponseMsg{Data: []byte{1}}, RelayResponseMsg{}, false},
-		{RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Data: []byte{1, 2, 3, 4, 6}}, false},
-		{RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Data: []byte{1, 2, 3}}, false},
-		{RelayResponseMsg{Data: []byte{1, 2, 3}}, RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, false},
-		{RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Data: []byte{1, 2, 3, 4, 5}}, true},
+		{RelayResponseMsg{Body: []byte{}}, RelayResponseMsg{Body: []byte{}}, true},
+		{RelayResponseMsg{}, RelayResponseMsg{Body: []byte{}}, true},
+		{RelayResponseMsg{Body: []byte{}}, RelayResponseMsg{}, true},
+		{RelayResponseMsg{}, RelayResponseMsg{Body: []byte{1}}, false},
+		{RelayResponseMsg{Body: []byte{1}}, RelayResponseMsg{}, false},
+		{RelayResponseMsg{Body: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Body: []byte{1, 2, 3, 4, 6}}, false},
+		{RelayResponseMsg{Body: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Body: []byte{1, 2, 3}}, false},
+		{RelayResponseMsg{Body: []byte{1, 2, 3}}, RelayResponseMsg{Body: []byte{1, 2, 3, 4, 5}}, false},
+		{RelayResponseMsg{Body: []byte{1, 2, 3, 4, 5}}, RelayResponseMsg{Body: []byte{1, 2, 3, 4, 5}}, true},
 	}
 	for _, tt := range tests {
 		actual := ChkRelayResponseMsgEq(tt.a, tt.b)

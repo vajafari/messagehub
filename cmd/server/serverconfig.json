@@ -3,6 +3,6 @@
     "port": 31549,
     "netType": "tcp",
     "sendQueueSize": 20,
-    "readBufSize": 10,
-    "writeBufSize": 10
+    "readBufSize": 8192,
+    "writeBufSize": 8192
 }

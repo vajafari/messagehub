@@ -3,16 +3,16 @@ package message
 import "encoding/binary"
 
 const (
-	// MaxReciverCount max count of receivers per message
-	MaxReciverCount int = 255
-	// MaxBodySize max length of data
-	MaxBodySize int = 1048576
+	// RelayMaxReciverCount max count of receivers per message
+	RelayMaxReciverCount int = 255
+	// RelayMaxBodySize max length of data
+	RelayMaxBodySize int = 1048576
 )
 
 // RelayRequestMsg represent request from client to relay a message to ither clients
 type RelayRequestMsg struct {
 	IDs  []uint64
-	Data []byte
+	Body []byte
 }
 
 // Type get type of Relay message
@@ -20,33 +20,19 @@ func (msg RelayRequestMsg) Type() byte {
 	return byte(RelayMgsCode)
 }
 
-// Length get length of body for RelayRequestMsg object
-func (msg RelayRequestMsg) Length() uint32 {
-	if len(msg.IDs) == 0 || len(msg.IDs) > MaxReciverCount {
-		return 0
+// Data get frame bytes of ListRequestMsg
+func (msg RelayRequestMsg) Data() ([]byte, error) {
+	if len(msg.IDs) == 0 || len(msg.IDs) > RelayMaxReciverCount {
+		return nil, ErrInvalidData
 	}
-	if len(msg.Data) == 0 || len(msg.Data) > MaxBodySize {
-		return 0
+	if len(msg.Body) == 0 || len(msg.Body) > RelayMaxBodySize {
+		return nil, ErrInvalidData
 	}
-
-	return uint32(1 + (len(msg.IDs) * 8) + len(msg.Data)) // 1 bytes for count of recievers
-}
-
-// Serialize get frame bytes of ListRequestMsg
-func (msg RelayRequestMsg) Serialize() []byte {
-	if len(msg.IDs) == 0 || len(msg.IDs) > MaxReciverCount {
-		return nil
-	}
-	if len(msg.Data) == 0 || len(msg.Data) > MaxBodySize {
-		return nil
-	}
-
-	hdr := makeHeaderBytes(msg.Type(), msg.Length())
-	body := make([]byte, msg.Length())
-	body[0] = byte(len(msg.IDs))
-	copy(body[1:], getUnit64Bytes(msg.IDs))
-	copy(body[1+(len(msg.IDs)*8):], msg.Data)
-	return appendSlices(hdr, body)
+	data := make([]byte, (len(msg.IDs)*8)+len(msg.Body)+1)
+	data[0] = byte(len(msg.IDs))
+	copy(data[1:], getUnit64Bytes(msg.IDs))
+	copy(data[(len(msg.IDs)*8)+1:], msg.Body)
+	return data, nil
 }
 
 // DeserializeRelayReq convert stream of bytes to RelayRequestMsg
@@ -73,14 +59,14 @@ func DeserializeRelayReq(bb []byte) (RelayRequestMsg, error) {
 
 	return RelayRequestMsg{
 		IDs:  uu,
-		Data: bb[(bb[0]*8)+1:],
+		Body: bb[(bb[0]*8)+1:],
 	}, nil
 }
 
 // RelayResponseMsg represent message from server to clients
 type RelayResponseMsg struct {
 	SenderID uint64
-	Data     []byte
+	Body     []byte
 }
 
 // Type get type of Relay message
@@ -88,28 +74,19 @@ func (msg RelayResponseMsg) Type() byte {
 	return byte(RelayMgsCode)
 }
 
-// Length get length of body for RelayResponseMsg object
-func (msg RelayResponseMsg) Length() uint32 {
-	if len(msg.Data) == 0 || len(msg.Data) > MaxBodySize {
-		return 0
-	}
-	return uint32(len(msg.Data) + 8)
-}
+// Data get frame bytes of ListRequestMsg
+func (msg RelayResponseMsg) Data() ([]byte, error) {
 
-// Serialize get frame bytes of ListRequestMsg
-func (msg RelayResponseMsg) Serialize() []byte {
-
-	if len(msg.Data) == 0 || len(msg.Data) > MaxBodySize {
-		return nil
+	if len(msg.Body) == 0 || len(msg.Body) > RelayMaxBodySize {
+		return nil, ErrInvalidData
 	}
 
-	hdr := makeHeaderBytes(msg.Type(), msg.Length())
-	body := make([]byte, msg.Length())
+	data := make([]byte, 8+len(msg.Body))
 	bb := make([]byte, 8)
 	binary.LittleEndian.PutUint64(bb, uint64(msg.SenderID))
-	copy(body[0:], bb)
-	copy(body[8:], msg.Data)
-	return appendSlices(hdr, body)
+	copy(data[0:], bb)
+	copy(data[8:], msg.Body)
+	return data, nil
 }
 
 // DeserializeRelayRes convert stream of bytes to RelayResponseMsg
@@ -121,6 +98,6 @@ func DeserializeRelayRes(bb []byte) (RelayResponseMsg, error) {
 
 	return RelayResponseMsg{
 		SenderID: binary.LittleEndian.Uint64(bb[0:8]),
-		Data:     bb[8:],
+		Body:     bb[8:],
 	}, nil
 }

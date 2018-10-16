@@ -6,8 +6,10 @@ import "errors"
 type MsgType byte
 
 var (
-	// ErrParsStream reporesent error on deserilize stream
+	// ErrParsStream represent error on deserilize stream
 	ErrParsStream = errors.New("Stream cannot parse to message")
+	// ErrInvalidData message data is not valid
+	ErrInvalidData = errors.New("Message data is not valid")
 )
 
 const (
