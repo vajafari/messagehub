@@ -319,6 +319,9 @@ func (pi *packetInspector) findPrefix(bb []byte) {
 
 func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPacket {
 	res := make([]rDataPacket, 0)
+	if len(bb) == 0 {
+		return res
+	}
 	dataStartIndex := 0
 	if !pi.completeFindPrefix {
 		pi.findPrefix(bb)
@@ -339,7 +342,7 @@ func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPa
 				pi.curPkgHeader = append(pi.curPkgHeader, bb[dataStartIndex:len(bb)]...)
 				return res
 			}
-			endOfHeader := dataStartIndex + (HeaderLen - len(pi.curPkgHeader))
+			endOfHeader = dataStartIndex + (HeaderLen - len(pi.curPkgHeader))
 			pi.curPkgHeader = append(pi.curPkgHeader, bb[dataStartIndex:endOfHeader]...)
 		}
 		msgTypeMaxLen, ok := msgTypeLen[pi.curPkgHeader[0]]
@@ -358,7 +361,7 @@ func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPa
 			pkt := rDataPacket{typ: pi.curPkgHeader[0], data: bb[dataStartIndex : dataStartIndex+currentPkgLen]}
 			res = append(res, pkt)
 			dataStartIndex += currentPkgLen
-			if dataStartIndex >= len(bb) {
+			if dataStartIndex > len(bb) {
 				//aafter finding prefix we reach to the rnd of slice
 				return res
 			}
@@ -376,13 +379,14 @@ func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPa
 		return res
 	}
 	remainLen := pi.currentPkgLen - len(pi.curPkg)
-	pkt := rDataPacket{typ: pi.curPkgHeader[0], data: bb[0:remainLen]}
+	pi.curPkg = append(pi.curPkg, bb[0:remainLen]...)
+	pkt := rDataPacket{typ: pi.curPkgHeader[0], data: pi.curPkg}
 	res = append(res, pkt)
 	if remainLen >= len(bb) {
 		//aafter finding prefix we reach to the rnd of slice
 		return res
 	}
 	pi.resetVariables()
-	res = append(res, pi.inspect(bb[dataStartIndex:], msgTypeLen)...)
+	res = append(res, pi.inspect(bb[remainLen:], msgTypeLen)...)
 	return res
 }
