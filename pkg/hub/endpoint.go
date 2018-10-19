@@ -1,8 +1,5 @@
 package hub
 
-// وظیفه ی این کلاس این است که یک سرور را استارت کند.
-// و وقتی یک کانکشن جدید ایجاد شد و یا بسته شد به ماژول کنترل کننده خبر دهد
-
 import (
 	"fmt"
 	"math/rand"
@@ -36,17 +33,15 @@ type Endpoint struct {
 	// There is another option, we can create a single instance of hub and
 	// and all endpoints (if we have multiple endpoints) use that centeralized hub
 	// In that situation we must
-	hub      *Hub      // Each endpoint must assiciated with a hub to manage the connections
-	stopChan chan bool // notify all goroutines to shutdown
+	hub *Hub // Each endpoint must assiciated with a hub to manage the connections
 
 }
 
 // NewEndpoint creates a endpoint for handle configurations
 func NewEndpoint(config EndpointConfing) *Endpoint {
 	return &Endpoint{
-		config:   config,
-		stopChan: make(chan bool),
-		hub:      NewHub(config.HubQueueSize),
+		config: config,
+		hub:    NewHub(config.HubQueueSize),
 	}
 }
 
@@ -54,14 +49,14 @@ func NewEndpoint(config EndpointConfing) *Endpoint {
 func (e *Endpoint) Start() error {
 	addr, errAddr := net.ResolveTCPAddr(e.config.NetType, e.config.GetHostAddress())
 	if errAddr != nil {
-		fmt.Printf("Endpoint, Address is not valid %s\n. Error message %s",
+		fmt.Printf("Endpoint, Address is not valid %s. Error message %s\n",
 			e.config.GetHostAddress(), errAddr.Error())
 		return errAddr
 	}
 
 	listener, errListen := net.ListenTCP(e.config.NetType, addr)
 	if errListen != nil {
-		fmt.Printf("Endpoint, Unable to listen on host address %s\n. Error message %s",
+		fmt.Printf("Endpoint, Unable to listen on host address %s. Error message %s\n",
 			e.config.GetHostAddress(), errListen.Error())
 		return errListen
 	}
@@ -69,21 +64,14 @@ func (e *Endpoint) Start() error {
 	defer listener.Close()
 	e.listener = listener
 
-	fmt.Println("Endpoint, Listen on", listener.Addr().String())
+	fmt.Printf("Endpoint, Listening on %s\n", e.config.GetHostAddress())
 	for {
-		select {
-		case <-e.stopChan:
-			fmt.Println("Endpoint, exist command recieved")
-			return nil
-		default:
-		}
-		fmt.Println("Endpoint, Accept a connection request.")
 
+		fmt.Println("Endpoint, Accept a connection request...")
 		conn, err := listener.AcceptTCP()
 		if err != nil {
-			fmt.Println("Endpoint, Failed accepting a connection request:", err)
+			fmt.Printf("Endpoint, Failed accepting a connection request. Error message=%s\n", err.Error())
 			continue
-
 		}
 
 		//On OSX and SetKeepAlive this will cause up to 8 TCP keepalive probes to be sent at an
@@ -95,16 +83,4 @@ func (e *Endpoint) Start() error {
 		e.hub.Add(skt)
 		// ass connection to channel
 	}
-}
-
-// Stop listening to the port and reporting new connection
-func (e *Endpoint) Stop() error {
-	err := (e.listener).Close()
-	if err != nil {
-		fmt.Printf("Endpoint, Unable to stop host address %s\n. Error message %s",
-			e.config.GetHostAddress(), err.Error())
-		return err
-	}
-	e.stopChan <- true
-	return nil
 }

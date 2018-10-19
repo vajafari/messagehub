@@ -10,8 +10,10 @@ import (
 )
 
 var (
-	// ErrNotConnected happned when no socket set to proxy
+	// ErrNotConnected happn when no socket set to proxy
 	ErrNotConnected = errors.New("No socket set for this proxy")
+	// ErrNotIdentified happen when try to send list or relay message to hub
+	ErrNotIdentified = errors.New("This socket is not identified")
 )
 
 const (
@@ -56,7 +58,7 @@ func (prx *Proxy) SetSocket(skt socket.Socket) error {
 		return ErrNotConnected
 	}
 	if prx.skt != nil {
-		return errors.New("A socket already set for proxy. Please close it first")
+		return errors.New("A socket already set for proxy")
 	}
 	prx.mutx.Lock()
 	defer prx.mutx.Unlock()
@@ -74,10 +76,11 @@ func (prx *Proxy) CloseSocket() error {
 	defer prx.mutx.Unlock()
 	err := prx.skt.Close()
 	if err != nil {
-		fmt.Printf("Error on socket closing process. Error message %s\n", err.Error())
+		fmt.Printf("Proxy, Error on closing socket. Error message %s\n", err.Error())
 		return err
 	}
 	prx.skt = nil
+	fmt.Println("Proxy, Socket closed!")
 	return nil
 }
 
@@ -92,10 +95,11 @@ func (prx *Proxy) SendID() error {
 		return errors.New("Id set to socket before")
 	}
 	prx.skt.Send(message.IDRequestMsg{})
+	fmt.Println("Proxy, Id message pushed in socket send queue")
 	return nil
 }
 
-// SendList send list message to server via socket
+// SendList send list message to hub via socket
 func (prx *Proxy) SendList() error {
 	prx.mutx.RLock()
 	defer prx.mutx.RUnlock()
@@ -103,13 +107,14 @@ func (prx *Proxy) SendList() error {
 		return ErrNotConnected
 	}
 	if prx.skt.ID() == 0 {
-		return errors.New("You are not identified. Send ID request first")
+		return ErrNotIdentified
 	}
 	prx.skt.Send(message.ListRequestMsg{})
+	fmt.Println("Proxy, List message pushed in socket send queue")
 	return nil
 }
 
-// SendRelay send relay message to server via socket
+// SendRelay send relay message to hub via socket
 func (prx *Proxy) SendRelay(ids []uint64, bb []byte) error {
 	prx.mutx.RLock()
 	defer prx.mutx.RUnlock()
@@ -117,7 +122,7 @@ func (prx *Proxy) SendRelay(ids []uint64, bb []byte) error {
 		return ErrNotConnected
 	}
 	if prx.skt.ID() == 0 {
-		return errors.New("You are not identified. Send ID request first")
+		return ErrNotIdentified
 	}
 	if len(ids) > message.RelayMaxReciverCount || len(ids) == 0 {
 		return errors.New("Recievers count is not valid")
@@ -130,11 +135,11 @@ func (prx *Proxy) SendRelay(ids []uint64, bb []byte) error {
 		IDs:  ids,
 	}
 	prx.skt.Send(msg)
+	fmt.Println("Proxy, Relay message pushed in socket send queue")
 	return nil
 }
 
 func (prx *Proxy) readHandler() {
-	fmt.Println("Proxy, Starting READER handler Go routine")
 	for rData := range prx.readChan {
 		switch rData.Pkt.Type() {
 		case byte(message.IDMgsCode):
@@ -144,69 +149,71 @@ func (prx *Proxy) readHandler() {
 		case byte(message.RelayMgsCode):
 			prx.handleRelayReq(rData)
 		default:
-			fmt.Printf("Proxy, Invalid message recieved from scoket %d\n", rData.SourceID)
+			fmt.Println("Proxy, Invalid message received from scoket")
 		}
 	}
-	fmt.Println("Proxy, Stop proxy READER handler Go routine")
 }
 
 func (prx *Proxy) handleIDReq(reqData socket.RData) {
 	bb, err := reqData.Pkt.Data()
 	if err != nil {
-		fmt.Println("Error on Deserialize ID response")
+		fmt.Println("Proxy, Error on retrieving id message")
+		return
 	}
 	msg, err := message.DeserializeIDRes(bb)
 	if err != nil {
-		fmt.Println("Error on Deserialize ID response")
+		fmt.Println("Proxy, Error on deserializing id message")
+		return
 	}
-	prx.mutx.RLock()
-	defer prx.mutx.RUnlock()
+	prx.mutx.Lock()
+	defer prx.mutx.Unlock()
 	if prx.skt.ID() == 0 {
 		prx.skt.SetID(msg.ID)
-	} else {
-		fmt.Println("Cannot reset ID")
+		fmt.Printf("Id response received. Client id: %d\n", msg.ID)
+	} else if prx.skt.ID() != msg.ID {
+		fmt.Println("Another id assigned to client before")
 	}
-	fmt.Printf("ID response recieved. Socket ID is %d\n", msg.ID)
+
 }
 
 func (prx *Proxy) handleListReq(reqData socket.RData) {
 
 	bb, err := reqData.Pkt.Data()
 	if err != nil {
-		fmt.Println("Error on Deserialize ID response")
+		fmt.Println("Proxy, Error on retrieving list message")
+		return
 	}
 	msg, err := message.DeserializeListRes(bb)
 	if err != nil {
-		fmt.Println("Error on Deserialize ID response")
+		fmt.Println("Proxy, Error on deserializing list message")
+		return
 	}
-	fmt.Printf("List response recieved. Socket ID is %v\n", msg.IDs)
+	fmt.Printf("List response received: %v\n", msg.IDs)
 }
 
 func (prx *Proxy) handleRelayReq(reqData socket.RData) {
 	bb, err := reqData.Pkt.Data()
 	if err != nil {
-		fmt.Println("Error on Deserialize ID response")
+		fmt.Println("Proxy, Error on retrieving relay message")
+		return
 	}
 	msg, err := message.DeserializeRelayRes(bb)
 	if err != nil {
-		fmt.Println("Error on Deserialize ID response")
+		fmt.Println("Proxy, Error on deserializing relay message")
+		return
 	}
-	fmt.Printf("Relay response recieved. Message length is %d, sender ID is %d\n", len(msg.Body), msg.SenderID)
+	fmt.Printf("Relay response received. Message length is %d, sender id is %d\n", len(msg.Body), msg.SenderID)
 }
 
 func (prx *Proxy) writeHandler() {
-	fmt.Println("Proxy, starting WRITER handler Go routine")
-	for wData := range prx.writeChan {
-		fmt.Printf("Proxy, Messge write in socket. type % d\n", wData.Pkt.Type())
+	for {
+		<-prx.writeChan
 	}
-	fmt.Println("Proxy, stoping proxy WRITER handler Go routine")
 }
 
 func (prx *Proxy) probHandler() {
-	fmt.Println("Proxy, starting proxy PROB handler Go routine")
 	for sig := range prx.probChan {
-		fmt.Printf("Proxy, Prob recived. error message is %s\n", sig.Err.Error())
+		fmt.Printf("Hub, Problem Recived. Error message is %s", sig.Err.Error())
 		prx.CloseSocket()
 	}
-	fmt.Println("Proxy, stoping proxy PROB handler Go routine")
 }

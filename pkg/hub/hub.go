@@ -71,12 +71,11 @@ func (h *Hub) Add(skt socket.Socket) error {
 
 	h.sktRepo[skt.ID()] = &info
 	skt.Start(h.writeChan, h.readChan, h.probChan, h.msgTypeLen)
-	fmt.Printf("Hub, Item add to map. Map len %d\n", len(h.sktRepo))
+	fmt.Printf("Hub, Item add to map. Current connection count: %d\n", len(h.sktRepo))
 	return nil
 }
 
 func (h *Hub) readHandler() {
-	fmt.Println("Hub, Starting hub READER handler Go routine")
 	for rData := range h.readChan {
 		switch rData.Pkt.Type() {
 		case byte(message.IDMgsCode):
@@ -89,72 +88,68 @@ func (h *Hub) readHandler() {
 			fmt.Printf("Hub, Invalid message recieved from scoket %d\n", rData.SourceID)
 		}
 	}
-	fmt.Println("Hub, Stop hub READER handler Go routine")
 }
 
 func (h *Hub) handleIDReq(reqData socket.RData) {
 	h.mutx.RLock()
 	defer h.mutx.RUnlock()
-	fmt.Printf("Hub, ID request received from socket %d\n", reqData.SourceID)
-	if sktInfo, ok := h.sktRepo[reqData.SourceID]; ok {
-		fmt.Printf("Hub, Id response to socket %d push in send queue\n", reqData.SourceID)
-		sktInfo.Skt.Send(message.IDResponseMsg{ID: sktInfo.Skt.ID()})
-	} else {
-		fmt.Printf("Hub, Socket ID %d not found in hub", reqData.SourceID)
+	sktInfo, ok := h.sktRepo[reqData.SourceID]
+	if !ok {
+		fmt.Printf("Hub, Reject id message from unknown Socket %d", reqData.SourceID)
+		return
 	}
+	sktInfo.Skt.Send(message.IDResponseMsg{ID: reqData.SourceID})
+	fmt.Printf("Hub, Id message pushed in socket %d send queue\n", reqData.SourceID)
 }
 
 func (h *Hub) handleListReq(reqData socket.RData) {
 	h.mutx.RLock()
 	defer h.mutx.RUnlock()
-	fmt.Printf("Hub, List request received from socket %d\n", reqData.SourceID)
 	if sktInfo, ok := h.sktRepo[reqData.SourceID]; ok {
 		if !sktInfo.IsIdentified {
-			fmt.Printf("Hub, Reject list message from unidentified socket %d\n", reqData.SourceID)
+			fmt.Printf("Hub, reject list message from unidentified socket %d\n", reqData.SourceID)
 			return
 		}
-		i := 0
+
+		//There are the different approach for constructing this list
+		//some of then are memory efficient but not cpu efficient and vice versa
+		//I choose simplest method
+		connList := make([]uint64, 0)
 		for k, v := range h.sktRepo {
 			if k != reqData.SourceID && v.IsIdentified {
-				i++
+				connList = append(connList, v.Skt.ID())
 			}
 		}
-		connList := make([]uint64, i)
-		i = 0
-		for k, v := range h.sktRepo {
-			if k != reqData.SourceID && v.IsIdentified {
-				connList[i] = v.Skt.ID()
-				i++
-			}
-		}
-		fmt.Printf("Hub, List response to socket %d push in send queue. IDs:{%v}\n", reqData.SourceID, reqData.SourceID)
 		if len(connList) > message.ListMaxItems {
 			sktInfo.Skt.Send(message.ListResponseMsg{IDs: connList[0:message.ListMaxItems]})
+			fmt.Printf("Hub, List message pushed in socket %d send queue. Count of connected %d\n",
+				sktInfo.Skt.ID(), len(connList[0:message.ListMaxItems]))
 		} else {
 			sktInfo.Skt.Send(message.ListResponseMsg{IDs: connList})
+			fmt.Printf("Hub, List message pushed in socket %d send queue. Count of connected %d\n",
+				sktInfo.Skt.ID(), len(connList))
 		}
 
 	} else {
-		fmt.Printf("Hub, Socket ID %d not found in hub", reqData.SourceID)
+		fmt.Printf("Hub, Reject list message from unknown Socket %d", reqData.SourceID)
 	}
 }
 
 func (h *Hub) handleRelayReq(reqData socket.RData) {
 	h.mutx.RLock()
 	defer h.mutx.RUnlock()
-	fmt.Printf("Hub, relay message received from socket %d\n", reqData.SourceID)
 	if sktInfo, ok := h.sktRepo[reqData.SourceID]; ok {
 		if !sktInfo.IsIdentified {
 			fmt.Printf("Hub, reject relay message from unidentified socket %d\n", reqData.SourceID)
 			return
 		}
 	} else {
-		fmt.Printf("Hub, Socket ID %d not found in hub", reqData.SourceID)
+		fmt.Printf("Hub, Reject relay message from unknown Socket %d", reqData.SourceID)
 		return
 	}
 	data, err := reqData.Pkt.Data()
 	if err != nil {
-		fmt.Printf("Hub, error on DeserializeRelayReq of relay message from socket {%d}\n", reqData.SourceID)
+		fmt.Printf("Hub, Error on deserializing relay message from socket {%d}\n", reqData.SourceID)
 		return
 	}
 	msg, err := message.DeserializeRelayReq(data)
@@ -166,55 +161,50 @@ func (h *Hub) handleRelayReq(reqData socket.RData) {
 		for _, id := range msg.IDs {
 			if sktInfo, ok := h.sktRepo[id]; ok {
 				if sktInfo.IsIdentified {
-					fmt.Printf("Hub, relay response to socket %d push in send queue\n", id)
 					sktInfo.Skt.Send(rspMsg)
+					fmt.Printf("Hub, Relay message pushed in socket %d send queue. Message len %d\n", id, len(msg.Body))
 				}
 			}
 		}
 	} else {
-		fmt.Printf("Hub, error on DeserializeRelayReq of relay message from socket {%d}\n", reqData.SourceID)
+		fmt.Printf("Hub, Error on deserializing relay message from socket {%d}\n", reqData.SourceID)
 	}
 }
 
 func (h *Hub) writeHandler() {
-	fmt.Println("Hub, starting WRITER handler Go routine")
 	for wData := range h.writeChan {
-
 		if wData.Pkt.Type() == byte(message.IDMgsCode) {
 			h.mutx.Lock()
 			if sktInfo, ok := h.sktRepo[wData.SourceID]; ok {
 				sktInfo.IsIdentified = true
 			}
 			h.mutx.Unlock()
+			fmt.Printf("Socket %d is identified now\n", wData.SourceID)
 		}
 	}
-	fmt.Println("Hub, stoping hub WRITER handler Go routine")
 }
 
 func (h *Hub) probHandler() {
-	fmt.Println("Hub, starting hub PROB handler Go routine")
 	for sig := range h.probChan {
-		fmt.Println("Hub, prob Recived.")
-		h.closeSocket(sig.SourceID)
+		fmt.Println("Hub, Problem Recived")
+		h.CloseSocket(sig.SourceID)
 	}
-	fmt.Println("Hub, stoping hub PROB handler Go routine")
 }
 
-// closeSocket find specific socket by id and close it
-func (h *Hub) closeSocket(id uint64) {
+// CloseSocket find specific socket by id and close it
+func (h *Hub) CloseSocket(id uint64) {
 	h.mutx.Lock()
 	defer h.mutx.Unlock()
-	fmt.Printf("Hub, close socket %d\n", id)
 	if sktInfo, ok := h.sktRepo[id]; ok {
-		fmt.Printf("Hub, Socket found in hub. Call close function of %d\n", sktInfo.Skt.ID())
 		err := sktInfo.Skt.Close()
 		if err != nil {
-			fmt.Printf("Hub, Error on closeing channel %d. Error messag is %s\n", sktInfo.Skt.ID(), err.Error())
+			fmt.Printf("Hub, Error on closing socket %d. Error messag is %s\n", sktInfo.Skt.ID(), err.Error())
+			return
 		}
 		delete(h.sktRepo, id)
-		fmt.Printf("HUB, Remove channel number %d, HUB LEN %d\n", id, len(h.sktRepo))
+		fmt.Printf("Hub, Successfully remove socket %d, Current socket count %d\n", id, len(h.sktRepo))
 	} else {
-		fmt.Printf("Hub, Error On find socker %d in socket map. socker map count is %d\n", id, len(h.sktRepo))
+		fmt.Printf("Hub, No socket found for close process!!! Socket id %d - Current socket count %d\n", id, len(h.sktRepo))
 	}
 }
 

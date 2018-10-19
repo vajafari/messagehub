@@ -5,37 +5,43 @@ GOCLEAN =  $(GOCMD)    clean
 GOTEST  =  $(GOCMD)    test
 GOGET   =  $(GOCMD)    get
 GOSET   =              set
-BINARY_NAME_CLINET_WIN =  client.exe
-BINARY_NAME_CLIENT_LIN =  client_lin
-CLINET_OUTPUT_WIN = ./cmd/client/$(BINARY_NAME_CLINET_WIN)
-CLINET_OUTPUT_LIN = ./cmd/client/$(BINARY_NAME_CLIENT_LIN)
+GOFILES	=	$(wildcard *.go)
+CLINET_PATH =  ./cmd/client
+CLINET_BINARY_NAME_WIN =  client.exe
+CLIENT_BINARY_NAME_LIN =  client_lin_out
+SERVER_PATH =  ./cmd/server
+SERVER_BINARY_NAME_WIN =  server.exe
+SERVER_BINARY_NAME_LIN =  server_lin_out
 
 
-clibuildwin:	
-	$(GOBUILD)	-o $(CLINET_OUTPUT_WIN) -v ./cmd/client/client.go	./cmd/client/clientconfig.go
+client-build-win:
+	set GOOS=windows
+	set GOARCH=amd64
+	$(GOBUILD)	-o $(CLINET_PATH)/$(CLINET_BINARY_NAME_WIN) -v $(CLINET_PATH)/$(GOFILES)
+client-build-lin:
+	set GOOS=linux
+	set GOARCH=amd64
+	$(GOBUILD)	-o $(CLINET_PATH)/$(CLIENT_BINARY_NAME_LIN) -v $(CLINET_PATH)/$(GOFILES)
+client-clean:
+	$(GOCLEAN)	$(CLINET_PATH)
+server-build-win:
+	set GOOS=windows
+	set GOARCH=amd64
+	$(GOBUILD)	-o $(SERVER_PATH)/$(SERVER_BINARY_NAME_WIN) -v $(SERVER_PATH)/$(GOFILES)
+server-build-lin:
+	set GOOS=linux
+	set GOARCH=amd64
+	$(GOBUILD)	-o $(SERVER_PATH)/$(SERVER_BINARY_NAME_LIN) -v $(SERVER_PATH)/$(GOFILES)
+server-clean:
+	$(GOCLEAN)	$(SERVER_PATH)
+build-lin:	client-build-lin	server-build-lin
+build-win:	server-build-win	client-build-win	
+build-all:	build-lin	build-win
+clean:	server-clean	client-clean
 test:	
 	$(GOTEST)	./...
-clirunwin: 
-	$(GOBUILD)	-o $(CLINET_OUTPUT_WIN) -v ./cmd/client/client.go	./cmd/client/clientconfig.go
-	./cmd/client/client.exe
-
-# run:    
-#     nmake windowsbuild    
-#     $(BINARY_NAME)
-# deps:   
-#     $(GOGET)    "github.com/spf13/viper"
-# clean:    
-#     $(GOCLEAN) -a
-#     del  $(BINARY_NAME)
-
-# inst:    
-#     $(GOINSTALL) -i
-
-# linuxbuild:
-#     nmake proto    
-#     SET GOOS=linux
-#     SET GOARCH=amd64
-#     $(GOBUILD) -o $(BINARY_NAME_LINUX)
+deps:   
+	$(GOGET)	"github.com/spf13/viper"
     
 # dockerbuild:
 #     nmake linuxbuild

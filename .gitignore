@@ -1,1 +1,4 @@
-/pkg/tcp/TODO.txt
+//
+*.exe
+*_lin_out
+/pkg/hub/TODO.txt

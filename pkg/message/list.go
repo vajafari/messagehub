@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	// ListMaxItems max length of data
+	// ListMaxItems limited to 1024 * 1024 / 8 that is equal to 1024KB (MAX Message size)
 	ListMaxItems int = 131072
 )
 

@@ -53,7 +53,7 @@ func main() {
 				continue
 			}
 			for i := 0; i < int(cliCnt); i++ {
-				fmt.Printf("Enter clinet Id %d\n", i)
+				fmt.Printf("Enter clinet Id %d\n", i+1)
 				cliID, err := scanInput(r)
 				if err != nil {
 					fmt.Println(err.Error())
@@ -82,7 +82,7 @@ func main() {
 }
 
 func connect(clientConfig ClientConfig) (*proxy.Proxy, error) {
-	fmt.Printf("Connecting to %s", clientConfig.GetHostAddress())
+	fmt.Printf("Connecting to %s ...\n", clientConfig.GetHostAddress())
 	d := net.Dialer{Timeout: time.Second * time.Duration(clientConfig.DailTimeout)}
 	conn, err := d.Dial(clientConfig.NetType, clientConfig.GetHostAddress())
 	if err != nil {
@@ -98,7 +98,7 @@ func connect(clientConfig ClientConfig) (*proxy.Proxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Connected!!")
+	fmt.Println("Connected!!")
 	return prx, nil
 }
 
