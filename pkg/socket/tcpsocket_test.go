@@ -7,12 +7,6 @@ import (
 	"github.com/vajafari/messagehub/pkg/message"
 )
 
-// یک پکت نرمال بیاید به صورت یکسره
-// یک پکت نرمال با قبل و بعد
-// یک پکن نرمال با بخشی از پریفیکس بعدی
-// یک پکت نرمال با بخشی از هدر بعدی
-// یک پکت نرمال با بخشی از دیتای بعدی
-
 func TestInspect(t *testing.T) {
 
 	pi := packetInspector{}
@@ -28,7 +22,20 @@ func TestInspect(t *testing.T) {
 		expectedInspector packetInspector
 		RequeireReset     bool
 	}{
-
+		//83 79 70 83 79 70 10 2 0 0 0 0
+		{[]byte{83, 79, 70, 83, 79, 70, 10, 2, 0, 0, 0, 0},
+			[]rDataPacket{rDataPacket{typ: 2, data: []byte{}}},
+			packetInspector{
+				completeFindPrefix: false,
+				partialFindPrefix:  false,
+				headerVerified:     false,
+				prevPrefixCnt:      0,
+				lastIndexPrefix:    0,
+				currentPkgLen:      0,
+				curPkgHeader:       []byte{},
+				curPkg:             nil,
+			}, true,
+		},
 		{[]byte{0, 0, 0, 83, 79, 70, 83, 79, 70, 10, 1},
 			nil,
 			packetInspector{

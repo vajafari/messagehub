@@ -1,0 +1,10 @@
+{
+    "host": "localhost",
+    "port": 31549,
+    "netType": "tcp",
+    "sendQueueSize": 3,
+    "readBufSize": 8192,
+    "writeBufSize": 8192,
+    "proxyQueueSize": 10,
+    "dailTimeout": 30
+}

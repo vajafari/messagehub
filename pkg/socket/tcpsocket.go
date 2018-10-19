@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
-	"io"
-	"log"
 	"net"
 	"time"
 
@@ -27,7 +25,7 @@ var (
 type TCPSocket struct {
 	conn      *net.TCPConn    // TCP connection.
 	id        uint64          // Assigned ID to current TCPSocket
-	send      chan Packet     // Outgoing packets queue. We use a buffered channel of packets as thread-safe FIFO queue
+	sendQueue chan Packet     // Outgoing packets queue. We use a buffered channel of packets as thread-safe FIFO queue
 	closeGoes chan bool       // This channel use to stop all go routines of TCPSocekt
 	readChan  chan<- RData    // if successfull read happen signal send through this channle
 	writeChan chan<- WData    // if successfull write happen signal send through this channle
@@ -41,18 +39,16 @@ type TCPSocket struct {
 }
 
 //NewTCPSocket create tcpSocket object to hold client collection info
-func NewTCPSocket(conn *net.TCPConn, id uint64, sendChanSize int, readBufSize int, writeBufSize int) *TCPSocket {
+func NewTCPSocket(conn *net.TCPConn, id uint64, sendQueueSize int, readBufSize int, writeBufSize int) *TCPSocket {
 	s := TCPSocket{
 		conn:         conn,
-		send:         make(chan Packet, sendChanSize),
+		sendQueue:    make(chan Packet, sendQueueSize),
 		closeGoes:    make(chan bool, 1),
 		readBufSize:  readBufSize,
 		writeBufSize: writeBufSize,
 		id:           id,
 	}
-
-	log.Printf("TCPSocket, Createing new TCPSocket with ID: %d-readBuf:%d-writeBuf:%d-sendQueue:%d", s.id, readBufSize, writeBufSize, sendChanSize)
-
+	fmt.Printf("TCPSocket, Createing new TCPSocket with ID: %d\n", s.id)
 	return &s
 }
 
@@ -67,27 +63,27 @@ func (s *TCPSocket) Start(writeChan chan<- WData, readChan chan<- RData, probCha
 	s.msgTypeLen = msgTypeLen
 	go s.reader()
 	go s.writer()
-	log.Printf("Start called for socket %d\n", s.id)
+	fmt.Printf("Start called for socket %d\n", s.id)
 }
 
 //Send Add packet to send queue
 func (s *TCPSocket) Send(pkt Packet) {
-	s.send <- pkt
-	log.Printf("New packet is pushed to send queue for socket %d\n", s.id)
+	s.sendQueue <- pkt
+	fmt.Printf("A new packet is pushed to send queue for socket %d\n", s.id)
 }
 
 // Close tcpSocket and release all the resources
 func (s *TCPSocket) Close() error {
-	log.Printf("TcpSocket, CLOSE function for socket %d called\n", s.id)
+	fmt.Printf("TcpSocket, CLOSE function for socket %d called\n", s.id)
 	err := s.conn.Close()
 	if err == nil {
 		s.closeGoes <- true
 		s.closeGoes <- true
-		close(s.send)
+		close(s.sendQueue)
 		close(s.closeGoes)
-		log.Printf("TcpSocket, socket %d closed\n", s.id)
+		fmt.Printf("TcpSocket, socket %d closed\n", s.id)
 	} else {
-		log.Println(err)
+		fmt.Println(err)
 	}
 	return err
 }
@@ -100,11 +96,11 @@ func (s *TCPSocket) ID() uint64 {
 // SetID return current channel id
 func (s *TCPSocket) SetID(id uint64) {
 	s.id = id
-	log.Printf("ITcpSocket, D ser for socket %d\n", s.id)
+	fmt.Printf("ITcpSocket, D ser for socket %d\n", s.id)
 }
 
 func (s *TCPSocket) writer() {
-	log.Printf("TcpSocket, Go routine writer started for socket %d\n", s.id)
+	fmt.Printf("TcpSocket, Go routine writer started for socket %d\n", s.id)
 	bufio.NewWriterSize(s.conn, s.writeBufSize)
 	buf := bufio.NewWriter(s.conn)
 	for {
@@ -113,19 +109,18 @@ func (s *TCPSocket) writer() {
 		//this go routine closes immediately when we call TCPSocket close method
 		select {
 		case <-s.closeGoes:
-			log.Printf("TcpSocket, Close signal recieved by writer go routine of socket %d. Write routine terminated\n", s.id)
+			fmt.Printf("TcpSocket, Close signal recieved by writer go routine of socket %d. Write routine terminated\n", s.id)
 			return
-		case pkt := <-s.send:
-			log.Printf("TcpSocket, Sending packet process start from tcpSocket %d\n", s.id)
+		case pkt := <-s.sendQueue:
+			fmt.Printf("TcpSocket, Sending packet process start from tcpSocket %d\n", s.id)
 			if pkt == nil {
 				continue
 			}
 			// Prepare data for sending on wire!!!
 			bb, err := pkt.Data()
-			if err == nil {
-				log.Printf("Error on get data from packet in socket %d\n", s.id)
+			if err != nil {
+				fmt.Printf("Error on get data from packet in socket %d\n", s.id)
 			}
-
 			pktBytes := make([]byte, prefixLen+HeaderLen+len(bb))
 			copy(pktBytes, packetPrefix)     //Prefix
 			pktBytes[prefixLen] = pkt.Type() //Type
@@ -133,31 +128,25 @@ func (s *TCPSocket) writer() {
 			binary.LittleEndian.PutUint32(lenBytes, uint32(len(bb)))
 			copy(pktBytes[prefixLen+1:], lenBytes) //Lent
 			copy(pktBytes[prefixLen+HeaderLen:], bb)
-			nn, err := s.writeWithRetry(buf, bb, writeTimeout)
+			// Data composed
+			nn, err := s.writeWithRetry(buf, pktBytes, writeTimeout)
 			if err != nil {
+				fmt.Printf("TCPSocket, error detected on read socket %d.Error message is %s. Read routine terminated\n", s.id, err.Error())
 				res := ProbData{
 					Pkt:      pkt,
 					SourceID: s.id,
 					Err:      err,
 				}
 				s.probChan <- res
-				if err == io.EOF {
-					log.Printf("TCPSocket, EOF detected for socker %d. Write routine terminated\n", s.id)
-					return
-				}
-				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
-					log.Printf("TCPSocket, TIMEOUT detected for socker %d. Write routine terminated\n", s.id)
-					return
-				}
-
-			} else {
-				res := WData{
-					Pkt:      pkt,
-					SourceID: s.id,
-				}
-				log.Printf("TcpSocket, SUCCESSFULL! Sent  message to tcpSocket %d. Message len was %d", s.id, nn)
-				s.writeChan <- res
+				return
 			}
+			res := WData{
+				Pkt:      pkt,
+				SourceID: s.id,
+			}
+			fmt.Printf("TcpSocket, SUCCESSFULL! Sent  message to tcpSocket %d. Message len was %d\n", s.id, nn)
+			s.writeChan <- res
+
 		}
 	}
 }
@@ -166,7 +155,7 @@ func (s *TCPSocket) writeWithRetry(buf *bufio.Writer, bb []byte, timeout time.Du
 	s.conn.SetWriteDeadline(time.Now().Add(timeout))
 	nn, err := buf.Write(bb)
 	if err != nil {
-		log.Printf("TcpSocket, Error on writing data to tcpSocket %d. Error Message is %s\n", s.id, err.Error())
+		fmt.Printf("TcpSocket, Error on writing data to tcpSocket %d. Error Message is %s\n", s.id, err.Error())
 		if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 			s.conn.SetWriteDeadline(time.Now().Add(timeout))
 			nn, err = buf.Write(bb)
@@ -178,7 +167,7 @@ func (s *TCPSocket) writeWithRetry(buf *bufio.Writer, bb []byte, timeout time.Du
 	}
 	err = buf.Flush()
 	if err != nil {
-		log.Printf("TcpSocket, Error on flushing buffer message for tcpSocket %d. Error Message is %s\n", s.id, err.Error())
+		fmt.Printf("TcpSocket, Error on flushing buffer message for tcpSocket %d. Error Message is %s\n", s.id, err.Error())
 		if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 			s.conn.SetWriteDeadline(time.Now().Add(timeout))
 			err = buf.Flush()
@@ -191,7 +180,7 @@ func (s *TCPSocket) writeWithRetry(buf *bufio.Writer, bb []byte, timeout time.Du
 }
 
 func (s *TCPSocket) reader() {
-	log.Printf("TcpSocket, Go routine reader started for socket %d\n", s.id)
+	fmt.Printf("TcpSocket, Go routine reader started for socket %d\n", s.id)
 	bb := make([]byte, s.readBufSize)
 	buf := bufio.NewReaderSize(s.conn, s.readBufSize)
 	pi := packetInspector{}
@@ -199,42 +188,35 @@ func (s *TCPSocket) reader() {
 	for {
 		select {
 		case <-s.closeGoes:
-			log.Printf("TcpSocket, Close signal recieved by reader go routine of socket %d. Write routine terminated\n.", s.id)
+			fmt.Printf("TcpSocket, Close signal recieved by reader go routine of socket %d. read routine terminated.\n", s.id)
 			return
 		default:
 		}
 		s.conn.SetReadDeadline(time.Now().Add(readTimeout))
 		n, err := buf.Read(bb)
 		if err != nil {
+			fmt.Printf("TCPSocket, error detected on read socket %d.Error message is %s. Read routine terminated\n", s.id, err.Error())
 			s.probChan <- ProbData{
 				Err:      err,
 				SourceID: s.ID(),
 			}
-			fmt.Printf("TcpSocket, Error On Read %s\n", err.Error())
-			if err == io.EOF {
-				log.Printf("TCPSocket, EOF detected for socker %d. Read routine terminated\n", s.id)
-				return
-			}
-			if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
-				log.Printf("TCPSocket, TIMEOUT detected for socker %d. Read routine terminated\n", s.id)
-				return
-			}
-			//break
-		} else {
-			if n == 0 {
-				continue
-			}
-			fmt.Printf("TcpSocket, %d bytes recieved in socket\n", n)
-			packets := pi.inspect(bb[0:n], s.msgTypeLen)
-			if len(packets) > 0 {
-				for _, pkt := range packets {
-					s.readChan <- RData{
-						Pkt:      pkt,
-						SourceID: s.id,
-					}
+			return
+		}
+		if n == 0 {
+			continue
+		}
+
+		fmt.Printf("TcpSocket, %d bytes recieved in socket\n", n)
+		packets := pi.inspect(bb[0:n], s.msgTypeLen)
+		if len(packets) > 0 {
+			for _, pkt := range packets {
+				s.readChan <- RData{
+					Pkt:      pkt,
+					SourceID: s.id,
 				}
 			}
 		}
+
 	}
 }
 

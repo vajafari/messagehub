@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -12,7 +12,7 @@ import (
 func main() {
 	err := configViper()
 	if err != nil {
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return
 	}
 
@@ -21,12 +21,12 @@ func main() {
 	h := hub.NewEndpoint(getEndpointConf())
 	h.Start()
 
-	//log.Printf("Starting end point")
+	//fmt.Printf("Starting end point")
 	//err = tcp.NewEndpoint(getEndpointConf(), nil).Start()
 	// if err != nil {
-	// 	log.Println(err.Error())
+	// 	fmt.Println(err.Error())
 	// }
-	// log.Println("Endpoint stoped serving")
+	// fmt.Println("Endpoint stoped serving")
 }
 
 func configViper() error {
@@ -44,47 +44,6 @@ func getEndpointConf() hub.EndpointConfing {
 		SendQueueSize: viper.GetInt("sendQueueSize"),
 		ReadBufSize:   viper.GetInt("readBufSize"),
 		WriteBufSize:  viper.GetInt("writeBufSize"),
+		HubQueueSize:  viper.GetInt("hubQueueSize"),
 	}
 }
-
-//var bbbb []byte
-//fmt.Println(len(bbbb))
-// bb := make([]byte, 8)
-// binary.LittleEndian.PutUint64(bb, uint64(4739))
-// slc := []uint64{3, 27, 492, 4587, 87345, 159743, 1468743, 22446078, 374557900, 3459980326, 348529584035, 3849560104835, 39475690128456}
-
-// for _, n := range slc {
-// 	binary.LittleEndian.PutUint64(bb, uint64(n))
-// 	fmt.Print(bb[0])
-// 	fmt.Print(", ")
-// 	fmt.Print(bb[1])
-// 	fmt.Print(", ")
-// 	fmt.Print(bb[2])
-// 	fmt.Print(", ")
-// 	fmt.Print(bb[3])
-// 	fmt.Print(", ")
-// 	fmt.Print(bb[4])
-// 	fmt.Print(", ")
-// 	fmt.Print(bb[5])
-// 	fmt.Print(", ")
-// 	fmt.Print(bb[6])
-// 	fmt.Print(", ")
-// 	fmt.Print(bb[7])
-// 	fmt.Print(", ")
-// }
-// err := configViper()
-// if err != nil {
-// 	log.Println(err.Error())
-
-// 	return
-// }
-
-// rand.Seed(time.Now().UTC().UnixNano())
-
-// log.Printf("Starting end point")
-// endpoint := hub.NewEndpoint(getEndpointConf())
-// err = endpoint.Start()
-// if err != nil {
-// 	log.Println(err.Error())
-// }
-// log.Println("Endpoint stoped serving")

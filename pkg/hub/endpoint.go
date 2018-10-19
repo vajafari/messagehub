@@ -4,7 +4,7 @@ package hub
 // و وقتی یک کانکشن جدید ایجاد شد و یا بسته شد به ماژول کنترل کننده خبر دهد
 
 import (
-	"log"
+	"fmt"
 	"math/rand"
 	"net"
 	"strconv"
@@ -20,6 +20,7 @@ type EndpointConfing struct {
 	SendQueueSize int
 	ReadBufSize   int
 	WriteBufSize  int
+	HubQueueSize  int
 }
 
 // GetHostAddress Apprend host address and port number together and return  full address of site
@@ -45,46 +46,42 @@ func NewEndpoint(config EndpointConfing) *Endpoint {
 	return &Endpoint{
 		config:   config,
 		stopChan: make(chan bool),
-		hub:      NewHub(10),
+		hub:      NewHub(config.HubQueueSize),
 	}
 }
-
-//TODO: conn.SetReadDeadline
-//TODO: func (c *TCPConn) SetKeepAlive(keepalive bool) os.Error
 
 // Start listening to the port and reporting new connection
 func (e *Endpoint) Start() error {
 	addr, errAddr := net.ResolveTCPAddr(e.config.NetType, e.config.GetHostAddress())
 	if errAddr != nil {
-		log.Printf("Endpoint, Address is not valid %s\n. Error message %s",
+		fmt.Printf("Endpoint, Address is not valid %s\n. Error message %s",
 			e.config.GetHostAddress(), errAddr.Error())
 		return errAddr
 	}
 
 	listener, errListen := net.ListenTCP(e.config.NetType, addr)
 	if errListen != nil {
-		log.Printf("Endpoint, Unable to listen on host address %s\n. Error message %s",
+		fmt.Printf("Endpoint, Unable to listen on host address %s\n. Error message %s",
 			e.config.GetHostAddress(), errListen.Error())
 		return errListen
 	}
 
-	//TODO: may be required to close the hub and all connection if server not listening to the port again
 	defer listener.Close()
 	e.listener = listener
 
-	log.Println("Endpoint, Listen on", listener.Addr().String())
+	fmt.Println("Endpoint, Listen on", listener.Addr().String())
 	for {
 		select {
 		case <-e.stopChan:
-			log.Println("Endpoint, exist command recieved")
+			fmt.Println("Endpoint, exist command recieved")
 			return nil
 		default:
 		}
-		log.Println("Endpoint, Accept a connection request.")
+		fmt.Println("Endpoint, Accept a connection request.")
 
 		conn, err := listener.AcceptTCP()
 		if err != nil {
-			log.Println("Endpoint, Failed accepting a connection request:", err)
+			fmt.Println("Endpoint, Failed accepting a connection request:", err)
 			continue
 
 		}
@@ -104,7 +101,7 @@ func (e *Endpoint) Start() error {
 func (e *Endpoint) Stop() error {
 	err := (e.listener).Close()
 	if err != nil {
-		log.Printf("Endpoint, Unable to stop host address %s\n. Error message %s",
+		fmt.Printf("Endpoint, Unable to stop host address %s\n. Error message %s",
 			e.config.GetHostAddress(), err.Error())
 		return err
 	}
