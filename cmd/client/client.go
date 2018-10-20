@@ -28,7 +28,7 @@ func main() {
 	}
 	r := bufio.NewReader(os.Stdin)
 	for {
-		//time.Sleep(2 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 		fmt.Println("Please enter yout command:")
 		fmt.Println("[1]- Send ID Request")
 		fmt.Println("[2]- Send List Request")

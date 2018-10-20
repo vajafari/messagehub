@@ -43,9 +43,3 @@ test:
 deps:   
 	$(GOGET)	"github.com/spf13/viper"
     
-# dockerbuild:
-#     nmake linuxbuild
-#     docker build -t vahidjafari/unitservice:1.0 .
-
-# dockerrun:
-#     docker run -ti --rm vahidjafari/unitservice:1.0

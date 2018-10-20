@@ -3,8 +3,6 @@ package socket
 import (
 	"fmt"
 	"testing"
-
-	"github.com/vajafari/messagehub/pkg/message"
 )
 
 func TestInspect(t *testing.T) {
@@ -12,9 +10,9 @@ func TestInspect(t *testing.T) {
 	pi := packetInspector{}
 	pi.resetVariables()
 	msgTypeLen := make(map[byte]int)
-	msgTypeLen[byte(message.IDMgsCode)] = 0
-	msgTypeLen[byte(message.ListMgsCode)] = 0
-	msgTypeLen[byte(message.RelayMgsCode)] = 1024 * 1024
+	msgTypeLen[1] = 0
+	msgTypeLen[2] = 0
+	msgTypeLen[3] = 1024 * 1024
 
 	var tests = []struct {
 		bb                []byte

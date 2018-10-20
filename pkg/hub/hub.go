@@ -77,6 +77,7 @@ func (h *Hub) Add(skt socket.Socket) error {
 
 func (h *Hub) readHandler() {
 	for rData := range h.readChan {
+
 		switch rData.Pkt.Type() {
 		case byte(message.IDMgsCode):
 			go h.handleIDReq(rData)

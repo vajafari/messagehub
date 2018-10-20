@@ -120,7 +120,7 @@ func (s *TCPSocket) writer() {
 			copy(pktBytes[prefixLen+1:], lenBytes) //Lent
 			copy(pktBytes[prefixLen+HeaderLen:], bb)
 			// Data composed
-			nn, err := s.writeWithRetry(buf, pktBytes, writeTimeout)
+			_, err = s.writeWithRetry(buf, pktBytes, writeTimeout)
 			if err != nil {
 				fmt.Printf("TCPSocket, Error on send data--- Socket%d   %s\n", s.id, err.Error())
 				res := ProbData{
@@ -135,7 +135,7 @@ func (s *TCPSocket) writer() {
 				Pkt:      pkt,
 				SourceID: s.id,
 			}
-			fmt.Printf("TcpSocket, Data Sent-- Socket %d- Len %d\n", s.id, nn)
+			//fmt.Printf("TcpSocket, Data Sent-- Socket %d- Len %d\n", s.id, nn)
 			s.writeChan <- res
 
 		}
@@ -191,8 +191,11 @@ func (s *TCPSocket) reader() {
 		if n == 0 {
 			continue
 		}
-
+		//fmt.Printf("SOCKET DATA RECIEVED COUNT %d", n)
 		packets := pi.inspect(bb[0:n], s.msgTypeLen)
+		//fmt.Printf("LEN PACKETS:%d---CFP:%t--PFP:%t--HV:%t--PPC:%d--LIP:%d--CPL:%d--CPH:%d--CP:%d\n",
+		//	len(packets), pi.completeFindPrefix, pi.partialFindPrefix, pi.headerVerified,
+		//	pi.prevPrefixCnt, pi.lastIndexPrefix, pi.currentPkgLen, len(pi.curPkgHeader), len(pi.curPkg))
 		if len(packets) > 0 {
 			for _, pkt := range packets {
 				s.readChan <- RData{
@@ -298,7 +301,7 @@ func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPa
 		dataStartIndex = pi.lastIndexPrefix + 1
 	}
 	if dataStartIndex >= len(bb) {
-		//aafter finding prefix we reach to the rnd of slice
+		//after finding prefix we reach to the rnd of slice
 		return res
 	}
 	if !pi.headerVerified {
@@ -349,10 +352,10 @@ func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPa
 	pi.curPkg = append(pi.curPkg, bb[0:remainLen]...)
 	pkt := rDataPacket{typ: pi.curPkgHeader[0], data: pi.curPkg}
 	res = append(res, pkt)
-	if remainLen >= len(bb) {
-		//aafter finding prefix we reach to the rnd of slice
-		return res
-	}
+	// if remainLen >= len(bb) {
+	// 	//aafter finding prefix we reach to the rnd of slice
+	// 	return res
+	// }
 	pi.resetVariables()
 	res = append(res, pi.inspect(bb[remainLen:], msgTypeLen)...)
 	return res
