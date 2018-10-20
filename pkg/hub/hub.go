@@ -17,10 +17,10 @@ const (
 	maxRelayMsgLen int = int(message.RelayMaxBodySize + (message.RelayMaxReciverCount * 8) + 1)
 )
 
-// Hub is connection manager of specific server
+// Hub is connection manager of a specific server
 // Design hub as separate module improve the scalability of the system
 // we can create different hubs for each type of messages
-// and assign them to the different end point
+// and assign them to the different endpoint
 type Hub struct {
 	sktRepo    map[uint64]*socketInfo
 	mutx       sync.RWMutex
@@ -30,7 +30,7 @@ type Hub struct {
 	msgTypeLen map[byte]int
 }
 
-// NewHub Create new instance and initilize properties of hub struct
+// NewHub Create new instance and initialize properties of hub struct
 func NewHub(queueSize int) *Hub {
 
 	hub := Hub{
@@ -113,7 +113,7 @@ func (h *Hub) handleListReq(reqData socket.RData) {
 		}
 
 		//There are the different approach for constructing this list
-		//some of then are memory efficient but not cpu efficient and vice versa
+		//some of then are memory efficient but not CPU efficient and vice versa
 		//I choose simplest method
 		connList := make([]uint64, 0)
 		for k, v := range h.sktRepo {

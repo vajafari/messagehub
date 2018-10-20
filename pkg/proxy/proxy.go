@@ -12,7 +12,7 @@ import (
 var (
 	// ErrNotConnected happn when no socket set to proxy
 	ErrNotConnected = errors.New("No socket set for this proxy")
-	// ErrNotIdentified happen when try to send list or relay message to hub
+	// ErrNotIdentified happen when try to send list or relay message to the hub
 	ErrNotIdentified = errors.New("This socket is not identified")
 )
 
@@ -33,7 +33,7 @@ type Proxy struct {
 	mutx       sync.RWMutex
 }
 
-// NewProxy Create new instance and initilize properties of proxy struct
+// NewProxy Create a new instance and initialize properties of the proxy struct
 func NewProxy(queueSize int) *Proxy {
 	prx := Proxy{
 		readChan:   make(chan socket.RData, queueSize),
@@ -52,7 +52,7 @@ func NewProxy(queueSize int) *Proxy {
 	return &prx
 }
 
-// SetSocket process send and recieve data
+// SetSocket process send and receive data
 func (prx *Proxy) SetSocket(skt socket.Socket) error {
 	if skt == nil {
 		return ErrNotConnected

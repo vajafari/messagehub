@@ -20,24 +20,23 @@ type EndpointConfing struct {
 	HubQueueSize  int
 }
 
-// GetHostAddress Apprend host address and port number together and return  full address of site
+// GetHostAddress Apprend host address and port number together and return  full address of the site
 func (conf *EndpointConfing) GetHostAddress() string {
 	return conf.Host + ":" + strconv.Itoa(conf.Port)
 }
 
 // Endpoint is tcp endpint that handle input connections
 type Endpoint struct {
-	config   EndpointConfing  // server configuration
-	listener *net.TCPListener // reference to listener
-	// In this project we create a hub for each endpoint
+	config   EndpointConfing  // Server configuration
+	listener *net.TCPListener // Reference to listener
+	// In this project, we create a hub for each endpoint
 	// There is another option, we can create a single instance of hub and
-	// and all endpoints (if we have multiple endpoints) use that centeralized hub
-	// In that situation we must
-	hub *Hub // Each endpoint must assiciated with a hub to manage the connections
+	// and all endpoints (if we have multiple endpoints) use that centralized hub
+	hub *Hub // Each endpoint must associated with a hub to manage the connections
 
 }
 
-// NewEndpoint creates a endpoint for handle configurations
+// NewEndpoint creates an endpoint for handle configurations
 func NewEndpoint(config EndpointConfing) *Endpoint {
 	return &Endpoint{
 		config: config,
@@ -76,11 +75,9 @@ func (e *Endpoint) Start() error {
 
 		//On OSX and SetKeepAlive this will cause up to 8 TCP keepalive probes to be sent at an
 		//interval of 75 seconds after a connection has been idle for 2 hours.
-		//Or in other words, Read will return an io.EOF error after 2 hours and 10 minutes (7200 + 8 * 75)
+		//In other words, Read will return an io.EOF error after 2 hours and 10 minutes (7200 + 8 * 75)
 		conn.SetKeepAlive(true)
-		//rand.Uint.Seed(time.Now().UTC().UnixNano())
 		skt := socket.NewTCPSocket(conn, rand.Uint64(), e.config.SendQueueSize, e.config.ReadBufSize, e.config.WriteBufSize)
 		e.hub.Add(skt)
-		// ass connection to channel
 	}
 }

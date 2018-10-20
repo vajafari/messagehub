@@ -20,25 +20,25 @@ var (
 	packetPrefix = []byte{83, 79, 70, 83, 79, 70, 10}
 )
 
-// TCPSocket holds information a connection betwen client and server
-// This class designed to be resuable across projeces
+// TCPSocket holds information a connection between client and server
+// This class designed to be reusable across projects
 type TCPSocket struct {
 	conn      *net.TCPConn    // TCP connection.
 	id        uint64          // Assigned ID to current TCPSocket
 	sendQueue chan Packet     // Outgoing packets queue. We use a buffered channel of packets as thread-safe FIFO queue
-	closeGoes chan bool       // This channel use to stop all go routines of TCPSocekt
-	readChan  chan<- RData    // if successfull read happen signal send through this channle
-	writeChan chan<- WData    // if successfull write happen signal send through this channle
-	probChan  chan<- ProbData // if error occur signal send through this channle
-	// This is map that specify how musch data is valid for ech type of message
-	// We use this to prevent client from sending illogical data.
-	// Each packet type (first byte of packet) has max lenght
+	closeGoes chan bool       // This channel used to stop all go routines of TCPSocekt
+	readChan  chan<- RData    // if successful read happen signal send through this channel
+	writeChan chan<- WData    // if successful write happen signal send through this channel
+	probChan  chan<- ProbData // if error occur signal to send through this channel
+	// This is a map that specifies how much data is valid for each type of message
+	// We use this to prevent the client from sending irrational data.
+	// Each packet type (first byte of packet) has max length
 	msgTypeLen   map[byte]int
 	readBufSize  int
 	writeBufSize int
 }
 
-//NewTCPSocket create tcpSocket object to hold client collection info
+//NewTCPSocket create TCP Socket object to hold client collection info
 func NewTCPSocket(conn *net.TCPConn, id uint64, sendQueueSize int, readBufSize int, writeBufSize int) *TCPSocket {
 	s := TCPSocket{
 		conn:         conn,
@@ -51,7 +51,7 @@ func NewTCPSocket(conn *net.TCPConn, id uint64, sendQueueSize int, readBufSize i
 	return &s
 }
 
-//Start set channel to communication with socket manager
+//Start set channels to communicate with the socket manager
 func (s *TCPSocket) Start(writeChan chan<- WData, readChan chan<- RData, probChan chan<- ProbData, msgTypeLen map[byte]int) {
 	if s.writeChan != nil || s.readChan != nil || s.probChan != nil || s.msgTypeLen != nil {
 		return
@@ -98,7 +98,7 @@ func (s *TCPSocket) writer() {
 	buf := bufio.NewWriter(s.conn)
 	for {
 		//When we close 'send' channel, It still received buffered packets so
-		//writer go routine continue to work. we use following select to make sure that
+		//writer go routine continue to work. we use the following select to make sure that
 		//this go routine closes immediately when we call TCPSocket close method
 		select {
 		case <-s.closeGoes:
@@ -191,7 +191,6 @@ func (s *TCPSocket) reader() {
 		if n == 0 {
 			continue
 		}
-		//fmt.Printf("SOCKET DATA RECIEVED COUNT %d", n)
 		packets := pi.inspect(bb[0:n], s.msgTypeLen)
 		//fmt.Printf("LEN PACKETS:%d---CFP:%t--PFP:%t--HV:%t--PPC:%d--LIP:%d--CPL:%d--CPH:%d--CP:%d\n",
 		//	len(packets), pi.completeFindPrefix, pi.partialFindPrefix, pi.headerVerified,
@@ -237,8 +236,8 @@ func (pi *packetInspector) findPrefix(bb []byte) {
 	}
 
 	if pi.partialFindPrefix && pi.prevPrefixCnt > 0 {
-		// There was a match with end of previous buffer
-		// so we must find remaining of pattern in start of current buffer
+		// There was a match with the end of the previous buffer
+		// so we must find remaining of pattern in the start of the current buffer
 		j := 0
 		for i := pi.prevPrefixCnt; i < prefixLen; i++ {
 			if j >= len(bb) {
@@ -258,8 +257,8 @@ func (pi *packetInspector) findPrefix(bb []byte) {
 			j++
 		}
 	}
-	// Patten does not exists partially in previous
-	// buffer anf must find it in current buffer
+	// Patten does not exist partially in previous
+	// buffer and must find it in the current buffer
 	for i := 0; i < len(bb); i++ {
 		if bb[i] == packetPrefix[0] {
 			pi.partialFindPrefix = true
@@ -301,7 +300,7 @@ func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPa
 		dataStartIndex = pi.lastIndexPrefix + 1
 	}
 	if dataStartIndex >= len(bb) {
-		//after finding prefix we reach to the rnd of slice
+		//after finding prefix we reach to the end of slice
 		return res
 	}
 	if !pi.headerVerified {
@@ -332,7 +331,7 @@ func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPa
 			res = append(res, pkt)
 			dataStartIndex += currentPkgLen
 			if dataStartIndex > len(bb) {
-				//aafter finding prefix we reach to the rnd of slice
+				//After finding prefix we reach to the end of slice
 				return res
 			}
 			pi.resetVariables()
@@ -342,8 +341,8 @@ func (pi *packetInspector) inspect(bb []byte, msgTypeLen map[byte]int) []rDataPa
 		pi.curPkg = append(pi.curPkg, bb[dataStartIndex:]...)
 		return res
 	}
-	// message prefix and header find previously
-	// so just append to current package and search for next pckage
+	// Message prefix and header find previously
+	// so just append to current package and search for next package
 	if pi.currentPkgLen > len(pi.curPkg)+len(bb) {
 		pi.curPkg = append(pi.curPkg, bb...)
 		return res
