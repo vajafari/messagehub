@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
-	"github.com/vajafari/messagehub/pkg/hub"
+	"github.com/vajafari/messagehub/cmd/server/internal/hub"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vajafari/messagehub/pkg/proxy"
+	"github.com/vajafari/messagehub/cmd/client/internal/proxy"
 	"github.com/vajafari/messagehub/pkg/socket"
 )
 
